@@ -26,8 +26,9 @@ var (
 
 // Voice is how the persona sounds.
 type Voice struct {
-	ConnectionID string `json:"connectionId"`
-	Voice        string `json:"voice"`
+	ConnectionID string  `json:"connectionId"`
+	Voice        string  `json:"voice"`
+	Model        *string `json:"model"`
 }
 
 // PersonaInput is the create/update request.
@@ -52,15 +53,15 @@ type Persona struct {
 	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
-const selectPersonas = `SELECT p.id, p.name, p.locale, p.temperament, p.notes, p.voice_connection_id, p.voice_name,
+const selectPersonas = `SELECT p.id, p.name, p.locale, p.temperament, p.notes, p.voice_connection_id, p.voice_name, p.voice_model,
 	(SELECT count(*) FROM scenarios s WHERE s.persona_id = p.id), p.created_at, p.updated_at FROM personas p`
 
 func scanPersona(row interface{ Scan(...any) error }) (Persona, error) {
 	var p Persona
-	var connID, voice *string
-	err := row.Scan(&p.ID, &p.Name, &p.Locale, &p.Temperament, &p.Notes, &connID, &voice, &p.ScenarioCount, &p.CreatedAt, &p.UpdatedAt)
+	var connID, voice, model *string
+	err := row.Scan(&p.ID, &p.Name, &p.Locale, &p.Temperament, &p.Notes, &connID, &voice, &model, &p.ScenarioCount, &p.CreatedAt, &p.UpdatedAt)
 	if connID != nil && voice != nil {
-		p.Voice = &Voice{ConnectionID: *connID, Voice: *voice}
+		p.Voice = &Voice{ConnectionID: *connID, Voice: *voice, Model: model}
 	}
 	return p, err
 }
@@ -105,6 +106,17 @@ func (s *Service) validatePersona(ctx context.Context, ws workspace.Workspace, i
 	}
 	if in.Voice != nil {
 		in.Voice.Voice = textLen(fields, "voice.voice", in.Voice.Voice, 1, 100)
+		if in.Voice.Model != nil {
+			m := strings.TrimSpace(*in.Voice.Model)
+			if len(m) > 100 {
+				fields["voice.model"] = "Use at most 100 characters."
+			}
+			if m == "" {
+				in.Voice.Model = nil
+			} else {
+				in.Voice.Model = &m
+			}
+		}
 		if err := s.checkConnection(ctx, ws, &in.Voice.ConnectionID, "voice.connectionId", fields, connection.CapTTS, connection.CapRealtime); err != nil {
 			return nil, err
 		}
@@ -125,11 +137,11 @@ func (s *Service) CreatePersona(ctx context.Context, ws workspace.Workspace, in 
 		return Persona{}, err
 	}
 	var id string
-	connID, voice := voiceColumns(in.Voice)
+	connID, voice, model := voiceColumns(in.Voice)
 	err = s.pool.QueryRow(ctx,
-		`INSERT INTO personas (workspace_id, name, locale, temperament, notes, voice_connection_id, voice_name)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-		ws.ID, in.Name, in.Locale, in.Temperament, in.Notes, connID, voice).Scan(&id)
+		`INSERT INTO personas (workspace_id, name, locale, temperament, notes, voice_connection_id, voice_name, voice_model)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+		ws.ID, in.Name, in.Locale, in.Temperament, in.Notes, connID, voice, model).Scan(&id)
 	if database.IsUniqueViolation(err, "personas_workspace_name_idx") {
 		return Persona{}, errPersonaTaken
 	}
@@ -154,10 +166,11 @@ func (s *Service) UpdatePersona(ctx context.Context, ws workspace.Workspace, id 
 	if err := apperr.Invalid(fields); err != nil {
 		return Persona{}, err
 	}
-	connID, voice := voiceColumns(in.Voice)
+	connID, voice, model := voiceColumns(in.Voice)
 	_, err = s.pool.Exec(ctx,
-		`UPDATE personas SET name = $3, locale = $4, temperament = $5, notes = $6, voice_connection_id = $7, voice_name = $8, updated_at = now()
-		 WHERE workspace_id = $1 AND id = $2`, ws.ID, id, in.Name, in.Locale, in.Temperament, in.Notes, connID, voice)
+		`UPDATE personas SET name = $3, locale = $4, temperament = $5, notes = $6, voice_connection_id = $7, voice_name = $8,
+		   voice_model = $9, updated_at = now()
+		 WHERE workspace_id = $1 AND id = $2`, ws.ID, id, in.Name, in.Locale, in.Temperament, in.Notes, connID, voice, model)
 	if database.IsUniqueViolation(err, "personas_workspace_name_idx") {
 		return Persona{}, errPersonaTaken
 	}
@@ -186,9 +199,9 @@ func (s *Service) DeletePersona(ctx context.Context, ws workspace.Workspace, id 
 	return err
 }
 
-func voiceColumns(v *Voice) (*string, *string) {
+func voiceColumns(v *Voice) (*string, *string, *string) {
 	if v == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
-	return &v.ConnectionID, &v.Voice
+	return &v.ConnectionID, &v.Voice, v.Model
 }

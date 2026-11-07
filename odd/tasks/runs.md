@@ -1,0 +1,37 @@
+# Runs
+
+Objective: execute scenarios against agents — a durable queue and worker, a simulated user (LLM, plus TTS for voice), text and voice conversation engines, live events, transcripts, metrics and audio artifacts.
+Branch: `feat/runs` (from `feat/scenarios`). Delivery: ask-on-risk (no remote yet); work-unit commits per slice.
+Test runner: `go test ./...` (backend), `pnpm --filter web lint typecheck test build` (web).
+
+## Specs
+
+- **S1** Launch: `POST /api/v1/workspaces/{slug}/runs` `{scenarioIds (1..100), repetitions 1..10 (default 1), concurrency 1..10 (default 3), label ≤100}` creates a batch and one run per scenario × repetition, each with a snapshot of the agent (no secret values), scenario and persona, status `queued`. Member or above. Launch is refused (422, per scenario under `scenarioIds.<i>`) when a scenario has no simulator connection/model, a voice scenario's persona has no voice, or the simulator mode is `realtime` ("not supported yet"). User (L1): "el poder generar conexion con el agente, el poder crear escenarios de pruebas y tener todo el informe de las evaluaciones".
+- **S2** Durable execution: a separate `worker` binary claims queued runs with `FOR UPDATE SKIP LOCKED`, respecting `WORKER_CONCURRENCY` per worker process (default 3) and each batch's concurrency. Running runs hold a lease (heartbeat); a run whose lease expires (worker crash) becomes `interrupted` and is not retried automatically. `POST .../runs/{id}/cancel` and `POST .../run-batches/{id}/cancel` stop queued and running runs (status `cancelled`). `POST .../runs/{id}/rerun` queues a new run from the same snapshot in the same batch. Statuses: `queued|running|completed|failed|cancelled|interrupted`.
+- **S3** Simulated user: an LLM decides each turn `{say, hangUp, reason}` from a system prompt built from the agent description, scenario context, persona (name, locale, temperament, notes), goal, instructions, facts (reveal only when asked) and the hang-up rule; providers `openai`, `azure_openai` (model = deployment) and `anthropic` (official Go SDK), all through the egress guard. Legacy prompt reused (`evaluator/prompt.py`).
+- **S4** Text engine: the user writes first; each message goes through the agent's transport and text codec (same rendering as the probe, fresh `run.thread_id` per run); ends on hang-up, `maxTurns`, `maxDurationSeconds`, or an agent/LLM error (status `failed` with a reason).
+- **S5** Voice engine (pipeline): connects with the agent's transport and voice codec; the user's turns are LLM text → TTS (`openai` / `azure_openai` audio speech, `azure_speech` SSML) as PCM16 mono 24 kHz, resampled to the codec sample rate, sent in real-time 100 ms frames with silence between turns; agent turns end on codec turn events (+1.2 s settle) or 900 ms without agent audio or transcript; the user waits for simulated playback plus 400 ms before speaking; configured interruptions cut agent turn N after `afterMs` of playback (codec `Interrupt`); ends on hang-up (codec close), `maxDurationSeconds`, `maxSilenceSeconds` without agent audio, or errors. The transcript comes from the agent's transcript events plus the user's spoken text (no STT yet). Persona voice gains an optional `model` (TTS model or Azure deployment).
+- **S6** Results: each run stores `endReason`, a transcript (`role user|agent`, text, startMs, endMs, agent `latencyMs` from the end of the user turn to the first agent audio or reply, `interrupted`), metrics (duration, user/agent turns, latency p50/p95, agent audio ms, LLM tokens), the trace session id and the thread id. Voice runs store `user.wav`, `agent.wav` and a mixed `conversation.wav` through a storage interface (local `ARTIFACTS_DIR`, default `./data/artifacts`; S3 later), served by `GET .../runs/{id}/audio/{track}`.
+- **S7** Live events: `GET .../runs/{id}/events` streams Server-Sent Events (status changes, transcript updates, metrics) from a `run_events` table (replay from `Last-Event-ID`, works across API instances); ends when the run finishes.
+- **S8** Queries: list batches with progress counts; list runs filtered by batch, scenario, agent and status (newest first, paginated); get a run with its snapshot names, transcript and metrics. Roles: any member reads; member+ launches, cancels and reruns; tenancy by workspace.
+- **S9** Web: "Run" actions on the scenarios list (multi-select) and editor with a launch dialog (repetitions, concurrency, label); Runs page with batches and runs (status, scenario, agent, duration, latency, end reason) refreshing live; run detail page with live transcript (SSE), status, metrics, audio player per track and cancel/rerun.
+
+Out of scope: realtime (speech-to-speech) simulator, STT of agent audio, LLM judge and Langfuse traces (Evaluation milestone), S3 storage.
+
+## Tasks
+
+| ID | Specs | Route | Status | Evidence |
+|---|---|---|---|---|
+| T1 | S1-S9 | inline | done | contract in `backend/api/openapi.yaml` |
+| T2 | S1, S2, S6-S8 | inline | done | 5 integration tests with fake engines (written with the code; RED not observed separately); `-race` clean |
+| T3 | S3, S4 | inline | pending | |
+| T4 | S5, S6 (audio) | inline | pending | |
+| T5 | S9 | delegated (parallel with T2-T4: disjoint surface `apps/web/**`) | pending | |
+| T6 | S1-S9 | inline E2E + independent verifier (Risk item 4: concurrency/leases; item 2: provider credentials) | pending | |
+
+## Log
+
+- **L1** (2026-11-06, user, from Foundation L1): "...el poder generar conexion con el agente, el poder crear escenarios de pruebas y tener todo el informe de las evaluaciones...".
+- **L2** (2026-11-07, user): "Sí, Runs".
+- **L3** (2026-11-07): Legacy runner: in-process asyncio tasks (lost on restart), global semaphore 3 + per-batch semaphore, caller mic 100 ms frames with silence fill and resync, 600 ms trailing silence, turn end 900 ms silence gap or response.done + 1200 ms settle, playback grace 400 ms, max silence 15 s, caller prompt sections and `{say, hangUp, reason}` schema. Decisions: the runs table is the queue (no extra dependency instead of River); realtime simulator deferred; transcript from agent events (no STT); local artifact storage behind an interface.
+- **L4** (2026-11-07): Queue claims lock each candidate batch row with `FOR UPDATE SKIP LOCKED` (strict per-batch concurrency without lock-order deadlocks). SSE disables the server write deadline through `http.ResponseController` (the logging middleware now implements `Unwrap`) and compacts jsonb event data. `WORKER_CONCURRENCY` is per worker process.

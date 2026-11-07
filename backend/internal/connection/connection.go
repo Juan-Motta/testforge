@@ -356,3 +356,37 @@ func scanConnection(row interface{ Scan(...any) error }) (Connection, error) {
 	}
 	return c, nil
 }
+
+// Credentials are a connection's kind, config and plaintext secret, for the worker.
+type Credentials struct {
+	Kind   Kind
+	Config map[string]string
+	Secret string
+}
+
+// Credentials loads and opens a connection of the workspace. Never expose the
+// result through the API.
+func (s *Service) Credentials(ctx context.Context, workspaceID, id string) (Credentials, error) {
+	if !uuidPattern.MatchString(id) {
+		return Credentials{}, errNotFound
+	}
+	var c Credentials
+	var cfgJSON []byte
+	var sealed string
+	err := s.pool.QueryRow(ctx,
+		`SELECT kind, config, secret_ciphertext FROM connections WHERE workspace_id = $1 AND id = $2`, workspaceID, id,
+	).Scan(&c.Kind, &cfgJSON, &sealed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Credentials{}, errNotFound
+	}
+	if err != nil {
+		return Credentials{}, fmt.Errorf("load connection: %w", err)
+	}
+	if err := json.Unmarshal(cfgJSON, &c.Config); err != nil {
+		return Credentials{}, fmt.Errorf("decode connection config: %w", err)
+	}
+	if c.Secret, err = s.box.Open(sealed, sealContext(workspaceID, id, c.Kind)); err != nil {
+		return Credentials{}, fmt.Errorf("open connection secret: %w", err)
+	}
+	return c, nil
+}

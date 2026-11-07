@@ -20,6 +20,7 @@ import (
 	"testforge/internal/platform/config"
 	"testforge/internal/platform/httpx"
 	"testforge/internal/platform/sealbox"
+	"testforge/internal/run"
 	"testforge/internal/scenario"
 	"testforge/internal/workspace"
 )
@@ -35,6 +36,7 @@ type server struct {
 	conns      *connection.Service
 	agents     *agent.Service
 	scenarios  *scenario.Service
+	runs       *run.Service
 }
 
 // New builds the API handler. It fails when the secret key is invalid.
@@ -52,6 +54,7 @@ func New(pool *pgxpool.Pool, cfg config.Config) (http.Handler, error) {
 		agents:     agent.NewService(pool, box, cfg.AllowPrivateNetwork),
 		scenarios:  scenario.NewService(pool),
 	}
+	s.runs = run.NewService(pool, s.agents, s.scenarios, run.LocalStorage{Dir: cfg.ArtifactsDir})
 	s.identity = identity.NewService(pool, cfg.SessionTTL, func(ctx context.Context, tx pgx.Tx, u identity.User) error {
 		return workspace.CreatePersonal(ctx, tx, u.ID, u.Name)
 	})
@@ -103,6 +106,16 @@ func New(pool *pgxpool.Pool, cfg config.Config) (http.Handler, error) {
 	mux.Handle("PUT /api/v1/workspaces/{slug}/scenarios/{id}", s.inWorkspace(s.updateScenario))
 	mux.Handle("DELETE /api/v1/workspaces/{slug}/scenarios/{id}", s.inWorkspace(s.deleteScenario))
 	mux.Handle("POST /api/v1/workspaces/{slug}/scenarios/{id}/duplicate", s.inWorkspace(s.duplicateScenario))
+
+	mux.Handle("GET /api/v1/workspaces/{slug}/runs", s.inWorkspace(s.listRuns))
+	mux.Handle("POST /api/v1/workspaces/{slug}/runs", s.inWorkspace(s.launchRuns))
+	mux.Handle("GET /api/v1/workspaces/{slug}/runs/{id}", s.inWorkspace(s.getRun))
+	mux.Handle("POST /api/v1/workspaces/{slug}/runs/{id}/cancel", s.inWorkspace(s.cancelRun))
+	mux.Handle("POST /api/v1/workspaces/{slug}/runs/{id}/rerun", s.inWorkspace(s.rerunRun))
+	mux.Handle("GET /api/v1/workspaces/{slug}/runs/{id}/events", s.inWorkspace(s.runEvents))
+	mux.Handle("GET /api/v1/workspaces/{slug}/runs/{id}/audio/{track}", s.inWorkspace(s.runAudio))
+	mux.Handle("GET /api/v1/workspaces/{slug}/run-batches", s.inWorkspace(s.listRunBatches))
+	mux.Handle("POST /api/v1/workspaces/{slug}/run-batches/{id}/cancel", s.inWorkspace(s.cancelRunBatch))
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, apperr.NotFound("Route not found."))

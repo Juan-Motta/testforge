@@ -235,13 +235,9 @@ func (s *Service) Probe(ctx context.Context, ws workspace.Workspace, id string, 
 	if err := apperr.Invalid(fields); err != nil {
 		return ProbeResult{}, err
 	}
-	secrets := map[string]string{}
-	for _, st := range stored {
-		plain, err := s.box.Open(st.Ciphertext, secretContext(ws.ID, a.ID, st.Name))
-		if err != nil {
-			return ProbeResult{}, fmt.Errorf("open agent secret %q: %w", st.Name, err)
-		}
-		secrets[st.Name] = plain
+	secrets, err := s.openSecrets(ws.ID, a.ID, stored)
+	if err != nil {
+		return ProbeResult{}, err
 	}
 	// Bound the whole probe (pre-session, dial, listening, close) below the
 	// server's write timeout so the client always gets an answer.
@@ -413,4 +409,26 @@ func scanAgent(row interface{ Scan(...any) error }) (Agent, []storedSecret, erro
 		a.CreatedBy = &Creator{ID: *creatorID, Name: *creatorName}
 	}
 	return a, stored, nil
+}
+
+func (s *Service) openSecrets(wsID, agentID string, stored []storedSecret) (map[string]string, error) {
+	secrets := map[string]string{}
+	for _, st := range stored {
+		plain, err := s.box.Open(st.Ciphertext, secretContext(wsID, agentID, st.Name))
+		if err != nil {
+			return nil, fmt.Errorf("open agent secret %q: %w", st.Name, err)
+		}
+		secrets[st.Name] = plain
+	}
+	return secrets, nil
+}
+
+// Secrets returns the plaintext secrets of an agent, for the worker. Never
+// expose the result through the API.
+func (s *Service) Secrets(ctx context.Context, workspaceID, agentID string) (map[string]string, error) {
+	_, stored, err := s.load(ctx, workspace.Workspace{ID: workspaceID}, agentID)
+	if err != nil {
+		return nil, err
+	}
+	return s.openSecrets(workspaceID, agentID, stored)
 }

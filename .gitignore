@@ -18,3 +18,7 @@ coverage/
 .vercel
 *.tsbuildinfo
 next-env.d.ts
+
+# Local run artifacts
+backend/data/
+data/

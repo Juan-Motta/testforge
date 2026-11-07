@@ -22,6 +22,7 @@ tags:
   - name: connections
   - name: agents
   - name: scenarios
+  - name: runs
 
 paths:
   /healthz:
@@ -727,6 +728,188 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/v1/workspaces/{slug}/runs:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [runs]
+      operationId: listRuns
+      parameters:
+        - { name: batchId, in: query, schema: { type: string, format: uuid } }
+        - { name: scenarioId, in: query, schema: { type: string, format: uuid } }
+        - { name: agentId, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/RunStatus" } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - name: before
+          in: query
+          description: Cursor from the previous page (`nextCursor`).
+          schema: { type: string }
+      responses:
+        "200":
+          description: Runs, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/RunSummary" } }
+                  nextCursor: { type: [string, "null"] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    post:
+      tags: [runs]
+      operationId: launchRuns
+      description: Member or above. Creates a batch with one run per scenario × repetition.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LaunchRequest" }
+      responses:
+        "201":
+          description: The batch and its queued runs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunBatch" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/workspaces/{slug}/runs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [runs]
+      operationId: getRun
+      responses:
+        "200":
+          description: The run with transcript and metrics.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/runs/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    post:
+      tags: [runs]
+      operationId: cancelRun
+      description: Member or above. No-op for finished runs.
+      responses:
+        "200":
+          description: The run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/runs/{id}/rerun:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    post:
+      tags: [runs]
+      operationId: rerunRun
+      description: Member or above. Queues a new run from the same snapshot in the same batch.
+      responses:
+        "201":
+          description: The new run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/runs/{id}/events:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [runs]
+      operationId: streamRunEvents
+      description: |
+        Server-Sent Events. Each event has `id` (sequence), `event` (`status`,
+        `transcript`, `metrics` or `log`) and JSON `data`. Send `Last-Event-ID` to
+        resume. The stream ends with an `end` event once the run has finished.
+      responses:
+        "200":
+          description: text/event-stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/runs/{id}/audio/{track}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+      - name: track
+        in: path
+        required: true
+        schema: { type: string, enum: [user, agent, conversation] }
+    get:
+      tags: [runs]
+      operationId: getRunAudio
+      description: WAV (PCM16 mono). Voice runs only.
+      responses:
+        "200":
+          description: audio/wav
+          content:
+            audio/wav:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/run-batches:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [runs]
+      operationId: listRunBatches
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
+          description: Batches, newest first, with progress.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/RunBatch" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/run-batches/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    post:
+      tags: [runs]
+      operationId: cancelRunBatch
+      description: Member or above. Cancels every unfinished run of the batch.
+      responses:
+        "200":
+          description: The batch.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunBatch" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/v1/workspaces/{slug}/api-keys:
     parameters:
       - $ref: "#/components/parameters/Slug"
@@ -1291,6 +1474,10 @@ components:
       properties:
         connectionId: { type: string, format: uuid, description: A connection with `tts` or `realtime` capability. }
         voice: { type: string, minLength: 1, maxLength: 100, description: "Provider voice name, e.g. `alloy` or `es-MX-DaliaNeural`." }
+        model:
+          type: [string, "null"]
+          maxLength: 100
+          description: TTS model (OpenAI, default `gpt-4o-mini-tts`) or deployment name (Azure OpenAI, required). Ignored by Azure AI Speech.
 
     PersonaInput:
       type: object
@@ -1433,6 +1620,110 @@ components:
             modality: { $ref: "#/components/schemas/Modality" }
             createdAt: { type: string, format: date-time }
             updatedAt: { type: string, format: date-time }
+
+    RunStatus:
+      type: string
+      enum: [queued, running, completed, failed, cancelled, interrupted]
+
+    LaunchRequest:
+      type: object
+      required: [scenarioIds]
+      properties:
+        scenarioIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { type: string, format: uuid }
+        repetitions: { type: integer, minimum: 1, maximum: 10, description: Default 1. }
+        concurrency: { type: integer, minimum: 1, maximum: 10, description: Runs of this batch at the same time. Default 3. }
+        label: { type: string, maxLength: 100 }
+
+    RunBatch:
+      type: object
+      required: [id, label, concurrency, total, counts, createdAt, createdBy]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        concurrency: { type: integer }
+        total: { type: integer }
+        counts:
+          type: object
+          description: Runs per status.
+          additionalProperties: { type: integer }
+        createdAt: { type: string, format: date-time }
+        createdBy:
+          oneOf:
+            - type: object
+              required: [id, name]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+            - type: "null"
+
+    RunMetrics:
+      type: object
+      required: [durationMs, userTurns, agentTurns, latencyP50Ms, latencyP95Ms, agentAudioMs, llmInputTokens, llmOutputTokens]
+      properties:
+        durationMs: { type: integer }
+        userTurns: { type: integer }
+        agentTurns: { type: integer }
+        latencyP50Ms: { type: [integer, "null"] }
+        latencyP95Ms: { type: [integer, "null"] }
+        agentAudioMs: { type: integer }
+        llmInputTokens: { type: integer }
+        llmOutputTokens: { type: integer }
+
+    RunSummary:
+      type: object
+      required: [id, batchId, scenarioId, scenarioName, agentId, agentName, personaName, modality, status, endReason, error, attempt, createdAt, startedAt, finishedAt, metrics]
+      properties:
+        id: { type: string, format: uuid }
+        batchId: { type: string, format: uuid }
+        scenarioId: { type: [string, "null"], format: uuid, description: Null if the scenario was deleted. }
+        scenarioName: { type: string }
+        agentId: { type: [string, "null"], format: uuid }
+        agentName: { type: string }
+        personaName: { type: string }
+        modality: { $ref: "#/components/schemas/Modality" }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        endReason:
+          type: [string, "null"]
+          description: "e.g. `user_hung_up`, `agent_closed`, `max_turns`, `max_duration`, `max_silence`, `cancelled`, `error`."
+        error: { type: [string, "null"] }
+        attempt: { type: integer, description: 1 for the first run of this scenario in the batch, then 2, 3... for reruns and repetitions. }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: [string, "null"], format: date-time }
+        finishedAt: { type: [string, "null"], format: date-time }
+        metrics:
+          oneOf:
+            - $ref: "#/components/schemas/RunMetrics"
+            - type: "null"
+
+    TranscriptTurn:
+      type: object
+      required: [role, text, startMs, endMs, latencyMs, interrupted]
+      properties:
+        role: { type: string, enum: [user, agent] }
+        text: { type: string }
+        startMs: { type: integer }
+        endMs: { type: integer }
+        latencyMs: { type: [integer, "null"], description: Agent turns only. }
+        interrupted: { type: boolean }
+
+    Run:
+      allOf:
+        - $ref: "#/components/schemas/RunSummary"
+        - type: object
+          required: [threadId, traceSessionId, transcript, audioTracks]
+          properties:
+            threadId: { type: [string, "null"], format: uuid }
+            traceSessionId: { type: [string, "null"] }
+            transcript:
+              type: array
+              items: { $ref: "#/components/schemas/TranscriptTurn" }
+            audioTracks:
+              type: array
+              items: { type: string, enum: [user, agent, conversation] }
 
     CreatedApiKey:
       allOf:

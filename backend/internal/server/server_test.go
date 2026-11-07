@@ -26,6 +26,7 @@ type env struct {
 	t    *testing.T
 	srv  *httptest.Server
 	pool *pgxpool.Pool
+	cfg  config.Config
 }
 
 type configOverride struct {
@@ -51,6 +52,7 @@ func newEnvWith(t *testing.T, mutate func(*configOverride)) *env {
 		SessionTTL:          time.Hour,
 		SecretKey:           base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{42}, 32)),
 		AllowPrivateNetwork: o.allowPrivate,
+		ArtifactsDir:        t.TempDir(),
 	}
 	handler, err := server.New(pool, cfg)
 	if err != nil {
@@ -58,7 +60,7 @@ func newEnvWith(t *testing.T, mutate func(*configOverride)) *env {
 	}
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return &env{t: t, srv: srv, pool: pool}
+	return &env{t: t, srv: srv, pool: pool, cfg: cfg}
 }
 
 // client is a browser-like client: it keeps cookies and sends the app Origin.
