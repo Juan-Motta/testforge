@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftIcon, CopyIcon, SaveIcon, Trash2Icon } from "lucide-react";
+import { ArrowLeftIcon, CopyIcon, PlayIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -19,6 +19,7 @@ import { useBeforeUnload } from "@/features/agents/components/use-before-unload"
 import { useConnections } from "@/features/connections/api/connections";
 import { usePersonas } from "@/features/personas/api/personas";
 import { PersonaDialog } from "@/features/personas/components/persona-dialog";
+import { LaunchDialog } from "@/features/runs/components/launch-dialog";
 import { sectionHref, SECTIONS } from "@/features/shell/lib/navigation";
 import { useCurrentWorkspace } from "@/features/workspaces/session-context";
 import { errorMessage, isApiError } from "@/lib/api/errors";
@@ -72,6 +73,7 @@ export function ScenarioEditor({ agents, scenario, prefill }: ScenarioEditorProp
   const duplicate = useDuplicateScenario(slug);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [personaDialogOpen, setPersonaDialogOpen] = useState(false);
+  const [launchOpen, setLaunchOpen] = useState(false);
   const scenariosHref = sectionHref(slug, SECTIONS.scenarios);
 
   const form = useForm<ScenarioFormValues>({
@@ -170,6 +172,15 @@ export function ScenarioEditor({ agents, scenario, prefill }: ScenarioEditorProp
     </Button>
   );
 
+  // Runs use the stored scenario, so a new or edited one has to be saved first.
+  const runBlocked = !scenario ? "Save the scenario to run it." : formState.isDirty ? "Save your changes before running." : null;
+  const runButton = (
+    <Button type="button" variant="outline" onClick={() => setLaunchOpen(true)} disabled={runBlocked !== null}>
+      <PlayIcon />
+      <span className="max-sm:sr-only">Run</span>
+    </Button>
+  );
+
   return (
     <FormProvider {...form}>
       <PageContainer className="gap-6">
@@ -219,6 +230,16 @@ export function ScenarioEditor({ agents, scenario, prefill }: ScenarioEditorProp
               />
               {canAuthor && (
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  {runBlocked ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span tabIndex={0}>{runButton}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>{runBlocked}</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    runButton
+                  )}
                   {scenario &&
                     (formState.isDirty ? (
                       <Tooltip>
@@ -281,6 +302,14 @@ export function ScenarioEditor({ agents, scenario, prefill }: ScenarioEditorProp
           open={personaDialogOpen}
           onOpenChange={setPersonaDialogOpen}
           onSaved={(persona) => form.setValue("personaId", persona.id, { shouldDirty: true, shouldValidate: true })}
+        />
+      )}
+      {scenario && canAuthor && (
+        <LaunchDialog
+          slug={slug}
+          open={launchOpen}
+          onOpenChange={setLaunchOpen}
+          scenarios={[{ id: scenario.id, name: scenario.name }]}
         />
       )}
       {scenario && canAuthor && (

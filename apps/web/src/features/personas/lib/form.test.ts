@@ -17,7 +17,7 @@ const persona: Persona = {
   locale: "es-MX",
   temperament: "hurried",
   notes: "Calls from the car.",
-  voice: { connectionId: "c-tts", voice: "es-MX-DaliaNeural" },
+  voice: { connectionId: "c-tts", voice: "es-MX-DaliaNeural", model: "tts-prod" },
   scenarioCount: 2,
   createdAt: "2026-11-07T10:00:00Z",
   updatedAt: "2026-11-07T10:00:00Z",
@@ -30,7 +30,7 @@ describe("persona form values", () => {
       locale: "en-US",
       temperament: "polite",
       notes: "",
-      voice: { connectionId: "", voice: "" },
+      voice: { connectionId: "", voice: "", model: "" },
     });
   });
 
@@ -40,12 +40,31 @@ describe("persona form values", () => {
       locale: "es-MX",
       temperament: "hurried",
       notes: "Calls from the car.",
-      voice: { connectionId: "c-tts", voice: "es-MX-DaliaNeural" },
+      voice: { connectionId: "c-tts", voice: "es-MX-DaliaNeural", model: "tts-prod" },
     });
   });
 
+  it("sends a null model when it is left empty and trims it otherwise", () => {
+    const base = { ...initialPersonaValues(), name: "Ana" };
+    expect(buildPersonaInput({ ...base, voice: { connectionId: "c", voice: "alloy", model: "  " } }).voice).toEqual({
+      connectionId: "c",
+      voice: "alloy",
+      model: null,
+    });
+    expect(buildPersonaInput({ ...base, voice: { connectionId: "c", voice: "alloy", model: " gpt-4o-mini-tts " } }).voice).toEqual({
+      connectionId: "c",
+      voice: "alloy",
+      model: "gpt-4o-mini-tts",
+    });
+  });
+
+  it("reads a stored voice without a model as an empty model", () => {
+    const stored = { ...persona, voice: { connectionId: "c", voice: "alloy" } };
+    expect(personaFormValues(stored).voice).toEqual({ connectionId: "c", voice: "alloy", model: "" });
+  });
+
   it("sends a null voice when no connection is picked and trims text", () => {
-    const values = { ...initialPersonaValues(), name: "  Ana ", locale: " es-ES ", notes: " x ", voice: { connectionId: "", voice: "alloy" } };
+    const values = { ...initialPersonaValues(), name: "  Ana ", locale: " es-ES ", notes: " x ", voice: { connectionId: "", voice: "alloy", model: "" } };
     expect(buildPersonaInput(values)).toEqual({ name: "Ana", locale: "es-ES", temperament: "polite", notes: "x", voice: null });
   });
 
@@ -75,6 +94,7 @@ describe("mapPersonaFieldErrors", () => {
         name: "Taken",
         "voice.connectionId": "Needs tts",
         "voice.voice": "Too long",
+        "voice.model": "Required for Azure",
         voice: "Invalid",
         createdAt: "odd",
       }),
@@ -83,6 +103,7 @@ describe("mapPersonaFieldErrors", () => {
         ["name", "Taken"],
         ["voice.connectionId", "Needs tts"],
         ["voice.voice", "Too long"],
+        ["voice.model", "Required for Azure"],
         ["voice.connectionId", "Invalid"],
       ],
       unmatched: ["odd"],

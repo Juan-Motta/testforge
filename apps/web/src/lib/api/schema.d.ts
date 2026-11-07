@@ -461,6 +461,167 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{slug}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        get: operations["listRuns"];
+        put?: never;
+        /** @description Member or above. Creates a batch with one run per scenario × repetition. */
+        post: operations["launchRuns"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/runs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Member or above. No-op for finished runs. */
+        post: operations["cancelRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/runs/{id}/rerun": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Member or above. Queues a new run from the same snapshot in the same batch. */
+        post: operations["rerunRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/runs/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * @description Server-Sent Events. Each event has `id` (sequence), `event` (`status`,
+         *     `transcript`, `metrics` or `log`) and JSON `data`. Send `Last-Event-ID` to
+         *     resume. The stream ends with an `end` event once the run has finished.
+         */
+        get: operations["streamRunEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/runs/{id}/audio/{track}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+                track: "user" | "agent" | "conversation";
+            };
+            cookie?: never;
+        };
+        /** @description WAV (PCM16 mono). Voice runs only. */
+        get: operations["getRunAudio"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/run-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        get: operations["listRunBatches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/run-batches/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Member or above. Cancels every unfinished run of the batch. */
+        post: operations["cancelRunBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{slug}/api-keys": {
         parameters: {
             query?: never;
@@ -818,6 +979,8 @@ export interface components {
             connectionId: string;
             /** @description Provider voice name, e.g. `alloy` or `es-MX-DaliaNeural`. */
             voice: string;
+            /** @description TTS model (OpenAI, default `gpt-4o-mini-tts`) or deployment name (Azure OpenAI, required). Ignored by Azure AI Speech. */
+            model?: string | null;
         };
         PersonaInput: {
             name: string;
@@ -923,6 +1086,91 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /** @enum {string} */
+        RunStatus: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
+        LaunchRequest: {
+            scenarioIds: string[];
+            /** @description Default 1. */
+            repetitions?: number;
+            /** @description Runs of this batch at the same time. Default 3. */
+            concurrency?: number;
+            label?: string;
+        };
+        RunBatch: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+            concurrency: number;
+            total: number;
+            /** @description Runs per status. */
+            counts: {
+                [key: string]: number;
+            };
+            /** Format: date-time */
+            createdAt: string;
+            createdBy: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            } | null;
+        };
+        RunMetrics: {
+            durationMs: number;
+            userTurns: number;
+            agentTurns: number;
+            latencyP50Ms: number | null;
+            latencyP95Ms: number | null;
+            agentAudioMs: number;
+            llmInputTokens: number;
+            llmOutputTokens: number;
+        };
+        RunSummary: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            batchId: string;
+            /**
+             * Format: uuid
+             * @description Null if the scenario was deleted.
+             */
+            scenarioId: string | null;
+            scenarioName: string;
+            /** Format: uuid */
+            agentId: string | null;
+            agentName: string;
+            personaName: string;
+            modality: components["schemas"]["Modality"];
+            status: components["schemas"]["RunStatus"];
+            /** @description e.g. `user_hung_up`, `agent_closed`, `max_turns`, `max_duration`, `max_silence`, `cancelled`, `error`. */
+            endReason: string | null;
+            error: string | null;
+            /** @description 1 for the first run of this scenario in the batch */
+            attempt: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt: string | null;
+            /** Format: date-time */
+            finishedAt: string | null;
+            metrics: components["schemas"]["RunMetrics"] | null;
+        };
+        TranscriptTurn: {
+            /** @enum {string} */
+            role: "user" | "agent";
+            text: string;
+            startMs: number;
+            endMs: number;
+            /** @description Agent turns only. */
+            latencyMs: number | null;
+            interrupted: boolean;
+        };
+        Run: components["schemas"]["RunSummary"] & {
+            /** Format: uuid */
+            threadId: string | null;
+            traceSessionId: string | null;
+            transcript: components["schemas"]["TranscriptTurn"][];
+            audioTracks: ("user" | "agent" | "conversation")[];
         };
         CreatedApiKey: components["schemas"]["ApiKey"] & {
             /** @description Full key. Shown only in this response. */
@@ -2007,6 +2255,254 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listRuns: {
+        parameters: {
+            query?: {
+                batchId?: string;
+                scenarioId?: string;
+                agentId?: string;
+                status?: components["schemas"]["RunStatus"];
+                limit?: number;
+                /** @description Cursor from the previous page (`nextCursor`). */
+                before?: string;
+            };
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runs, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["RunSummary"][];
+                        nextCursor: string | null;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    launchRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LaunchRequest"];
+            };
+        };
+        responses: {
+            /** @description The batch and its queued runs. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunBatch"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    getRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run with transcript and metrics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cancelRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    rerunRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new run. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummary"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    streamRunEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description text/event-stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getRunAudio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+                track: "user" | "agent" | "conversation";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description audio/wav */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/wav": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listRunBatches: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Batches, newest first, with progress. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["RunBatch"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cancelRunBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The batch. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunBatch"];
                 };
             };
             401: components["responses"]["Unauthorized"];

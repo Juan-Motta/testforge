@@ -6,7 +6,8 @@ export type PersonaFormValues = {
   locale: string;
   temperament: Temperament;
   notes: string;
-  voice: { connectionId: string; voice: string };
+  /** `model` is "" when the provider default (or none) applies. */
+  voice: { connectionId: string; voice: string; model: string };
 };
 
 export const TEMPERAMENTS: { value: Temperament; label: string; description: string }[] = [
@@ -35,7 +36,7 @@ export function voiceConnections<T extends { capabilities: Capability[] }>(conne
 }
 
 export function initialPersonaValues(): PersonaFormValues {
-  return { name: "", locale: "en-US", temperament: "polite", notes: "", voice: { connectionId: "", voice: "" } };
+  return { name: "", locale: "en-US", temperament: "polite", notes: "", voice: { connectionId: "", voice: "", model: "" } };
 }
 
 export function personaFormValues(persona: Persona): PersonaFormValues {
@@ -44,7 +45,11 @@ export function personaFormValues(persona: Persona): PersonaFormValues {
     locale: persona.locale,
     temperament: persona.temperament,
     notes: persona.notes,
-    voice: { connectionId: persona.voice?.connectionId ?? "", voice: persona.voice?.voice ?? "" },
+    voice: {
+      connectionId: persona.voice?.connectionId ?? "",
+      voice: persona.voice?.voice ?? "",
+      model: persona.voice?.model ?? "",
+    },
   };
 }
 
@@ -57,11 +62,15 @@ export function buildPersonaInput(values: PersonaFormValues): PersonaInput {
     voice:
       values.voice.connectionId === ""
         ? null
-        : { connectionId: values.voice.connectionId, voice: values.voice.voice.trim() },
+        : {
+            connectionId: values.voice.connectionId,
+            voice: values.voice.voice.trim(),
+            model: values.voice.model.trim() || null,
+          },
   };
 }
 
-const FIELD_PATHS = new Set(["name", "locale", "temperament", "notes", "voice.connectionId", "voice.voice"]);
+const FIELD_PATHS = new Set(["name", "locale", "temperament", "notes", "voice.connectionId", "voice.voice", "voice.model"]);
 const ALIASES: Record<string, string> = { voice: "voice.connectionId" };
 
 /** Splits the API's `error.fields` into errors on a form path and messages with no input. */

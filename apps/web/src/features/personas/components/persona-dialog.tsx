@@ -282,6 +282,32 @@ function PersonaForm({ slug, persona, onSaved }: { slug: string; persona?: Perso
             )}
           />
         </div>
+        <Controller
+          name="voice.model"
+          control={control}
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <FieldLabel htmlFor="persona-voice-model">Model</FieldLabel>
+              <Input
+                {...field}
+                id="persona-voice-model"
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={100}
+                placeholder="gpt-4o-mini-tts"
+                disabled={voiceConnectionId === ""}
+                aria-invalid={fieldState.invalid}
+              />
+              {fieldState.error ? (
+                <FieldError errors={[fieldState.error]} />
+              ) : (
+                <FieldDescription>
+                  Optional. OpenAI default gpt-4o-mini-tts; Azure OpenAI deployment name.
+                </FieldDescription>
+              )}
+            </Field>
+          )}
+        />
       </FieldGroup>
       <DialogFooter>
         <DialogClose asChild>

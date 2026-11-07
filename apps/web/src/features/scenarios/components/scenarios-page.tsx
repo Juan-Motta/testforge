@@ -10,6 +10,7 @@ import { PageContainer } from "@/components/page-container";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { useAgents } from "@/features/agents/api/agents";
+import { LaunchDialog } from "@/features/runs/components/launch-dialog";
 import { usePersonas } from "@/features/personas/api/personas";
 import { SECTIONS, sectionHref } from "@/features/shell/lib/navigation";
 import { useCurrentWorkspace } from "@/features/workspaces/session-context";
@@ -24,6 +25,7 @@ import { GroupDialog } from "./group-dialog";
 import { GroupSidebar } from "./group-sidebar";
 import { ScenarioList } from "./scenario-list";
 import { ScenarioToolbar } from "./scenario-toolbar";
+import { SelectionBar } from "./selection-bar";
 
 export function ScenariosPage() {
   const workspace = useCurrentWorkspace();
@@ -45,6 +47,8 @@ export function ScenariosPage() {
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const [renaming, setRenaming] = useState<ScenarioGroup | null>(null);
   const [deletingGroup, setDeletingGroup] = useState<ScenarioGroup | null>(null);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [launchOpen, setLaunchOpen] = useState(false);
 
   const setFilters = useCallback(
     (patch: Partial<ScenarioFilters>) => {
@@ -57,6 +61,33 @@ export function ScenariosPage() {
   const tags = useMemo(() => [...new Set(all.data?.flatMap((scenario) => scenario.tags) ?? [])].sort(), [all.data]);
   const ungroupedCount = all.data?.filter((scenario) => scenario.groupId === null).length;
   const hasAgents = (agents.data?.length ?? 0) > 0;
+  // Selected scenarios that still exist, in list order (the launch order).
+  const selectedScenarios = useMemo(
+    () => all.data?.filter((scenario) => selected.has(scenario.id)) ?? [],
+    [all.data, selected],
+  );
+  const visibleIds = scenarios.data?.map((scenario) => scenario.id) ?? [];
+  const visibleSelected = visibleIds.filter((id) => selected.has(id)).length;
+
+  function toggle(id: string, checked: boolean) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function selectVisible(checked: boolean) {
+    setSelected((current) => {
+      const next = new Set(current);
+      for (const id of visibleIds) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
 
   const newParams = new URLSearchParams();
   if (filters.agentId) newParams.set("agentId", filters.agentId);
@@ -135,6 +166,7 @@ export function ScenariosPage() {
         personas={personas.data}
         groups={groups.data}
         loading={scenarios.isPending || all.isPending}
+        selection={canAuthor ? { selected, onToggle: toggle } : undefined}
       />
     );
   }
@@ -168,6 +200,16 @@ export function ScenariosPage() {
           {all.data?.length !== 0 && (
             <ScenarioToolbar filters={filters} agents={agents.data} tags={tags} onChange={setFilters} />
           )}
+          {canAuthor && selectedScenarios.length > 0 && (
+            <SelectionBar
+              selectedCount={selectedScenarios.length}
+              visibleSelected={visibleSelected}
+              visibleCount={visibleIds.length}
+              onSelectVisible={selectVisible}
+              onClear={() => setSelected(new Set())}
+              onRun={() => setLaunchOpen(true)}
+            />
+          )}
           {body}
         </div>
       </div>
@@ -181,6 +223,13 @@ export function ScenariosPage() {
             onSaved={(group) => {
               if (!renaming) setFilters({ groupId: group.id });
             }}
+          />
+          <LaunchDialog
+            slug={slug}
+            open={launchOpen}
+            onOpenChange={setLaunchOpen}
+            scenarios={selectedScenarios}
+            onLaunched={() => setSelected(new Set())}
           />
           <DeleteGroupDialog
             slug={slug}
