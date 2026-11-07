@@ -58,14 +58,15 @@ func run() error {
 		slog.Info("migrations applied")
 		return nil
 	case "serve":
+		// Build first so an invalid SECRET_KEY fails before any migration runs.
+		handler, err := server.New(pool, cfg)
+		if err != nil {
+			return err
+		}
 		if cfg.AutoMigrate {
 			if err := database.Migrate(ctx, pool); err != nil {
 				return err
 			}
-		}
-		handler, err := server.New(pool, cfg)
-		if err != nil {
-			return err
 		}
 		return serve(ctx, cfg, handler)
 	default:

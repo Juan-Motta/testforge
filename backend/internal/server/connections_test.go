@@ -145,8 +145,8 @@ func TestConnectionLifecycleKeepsSecretEncryptedAndHidden(t *testing.T) {
 	dup := owner.do("POST", base, map[string]any{"name": "openai PROD", "kind": "anthropic", "secret": "x", "config": map[string]any{}})
 	expectStatus(t, dup, http.StatusConflict)
 
-	// Rename and change config without resending the secret: the stored one is kept.
-	upd := owner.do("PATCH", base+"/"+id, map[string]any{"name": "OpenAI staging", "config": map[string]any{"baseUrl": provider.srv.URL, "organization": "org-1"}})
+	// Rename and change a non-URL setting without resending the secret: the stored one is kept.
+	upd := owner.do("PATCH", base+"/"+id, map[string]any{"name": "OpenAI staging", "config": map[string]any{"baseUrl": provider.srv.URL + "/v1", "organization": "org-1"}})
 	expectStatus(t, upd, http.StatusOK)
 	if upd.body["name"] != "OpenAI staging" || upd.body["config"].(map[string]any)["organization"] != "org-1" || upd.body["secretHint"] != "•••• abcd" {
 		t.Fatalf("updated = %v", upd.body)
@@ -156,7 +156,7 @@ func TestConnectionLifecycleKeepsSecretEncryptedAndHidden(t *testing.T) {
 	if test.body["ok"] != true || !strings.Contains(test.body["message"].(string), "2 models") {
 		t.Fatalf("test = %v", test.body)
 	}
-	if got := provider.lastAuth.Load().(string); got != "GET /models Bearer "+testSecret+" " {
+	if got := provider.lastAuth.Load().(string); got != "GET /v1/models Bearer "+testSecret+" " {
 		t.Fatalf("provider saw %q", got)
 	}
 	got := owner.do("GET", base+"/"+id, nil).body
@@ -327,5 +327,61 @@ func TestDeletingCreatorKeepsConnection(t *testing.T) {
 	expectStatus(t, r, http.StatusOK)
 	if _, present := r.body["createdBy"]; !present || r.body["createdBy"] != nil {
 		t.Fatalf("createdBy = %v", r.body["createdBy"])
+	}
+}
+
+func TestChangingAURLRequiresTheSecretAgain(t *testing.T) {
+	e := newEnv(t)
+	owner, slug := ownerWorkspace(t, e)
+	provider := newFakeProvider(t, false)
+	attacker := newFakeProvider(t, false)
+	base := "/api/v1/workspaces/" + slug + "/connections"
+	conn := createConnection(t, owner, slug, map[string]any{"name": "Azure", "kind": "azure_openai", "secret": testSecret,
+		"config": map[string]any{"endpoint": provider.srv.URL}})
+	item := base + "/" + conn["id"].(string)
+	admin := addMember(t, e, slug, "admin")
+
+	r := admin.do("PATCH", item, map[string]any{"config": map[string]any{"endpoint": attacker.srv.URL}})
+	expectStatus(t, r, http.StatusUnprocessableEntity)
+	if r.body["error"].(map[string]any)["fields"].(map[string]any)["secret"] == nil {
+		t.Fatalf("want a secret field error, got %v", r.body)
+	}
+	expectStatus(t, admin.do("POST", item+"/test", nil), http.StatusOK)
+	if got := attacker.lastAuth.Load().(string); got != "" {
+		t.Fatalf("stored secret reached the new host: %q", got)
+	}
+
+	// Same URL (after normalization) and non-URL changes keep working without the secret.
+	expectStatus(t, admin.do("PATCH", item, map[string]any{"config": map[string]any{"endpoint": provider.srv.URL + "/", "apiVersion": "2025-01-01-preview"}}), http.StatusOK)
+	// A new URL together with a new secret is fine.
+	expectStatus(t, admin.do("PATCH", item, map[string]any{"secret": "fresh-key-0000", "config": map[string]any{"endpoint": attacker.srv.URL}}), http.StatusOK)
+}
+
+func TestProviderRedirectToAnotherHostIsNotFollowed(t *testing.T) {
+	e := newEnv(t)
+	owner, slug := ownerWorkspace(t, e)
+	thief := newFakeProvider(t, false)
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, strings.Replace(thief.srv.URL, "127.0.0.1", "localhost", 1)+r.URL.Path, http.StatusFound)
+	}))
+	t.Cleanup(redirector.Close)
+
+	conn := createConnection(t, owner, slug, map[string]any{"name": "Anthropic", "kind": "anthropic", "secret": testSecret,
+		"config": map[string]any{"baseUrl": redirector.URL}})
+	r := owner.do("POST", "/api/v1/workspaces/"+slug+"/connections/"+conn["id"].(string)+"/test", nil)
+	if r.body["ok"] != false || !strings.Contains(r.body["message"].(string), "redirect") {
+		t.Fatalf("test = %v", r.body)
+	}
+	if got := thief.lastAuth.Load().(string); got != "" {
+		t.Fatalf("secret followed the redirect: %q", got)
+	}
+}
+
+func TestNonASCIISecretHint(t *testing.T) {
+	e := newEnv(t)
+	owner, slug := ownerWorkspace(t, e)
+	conn := createConnection(t, owner, slug, map[string]any{"name": "Anthropic", "kind": "anthropic", "secret": "aaaaaaaé€xy", "config": map[string]any{}})
+	if conn["secretHint"] != "•••• é€xy" {
+		t.Fatalf("secretHint = %v", conn["secretHint"])
 	}
 }

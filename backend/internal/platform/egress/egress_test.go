@@ -58,3 +58,11 @@ func TestIsPublic(t *testing.T) {
 		}
 	}
 }
+
+func TestIsPublicReservedRanges(t *testing.T) {
+	for _, ip := range []string{"64:ff9b::7f00:1", "::127.0.0.1", "fec0::1", "0.1.2.3", "198.18.0.1", "192.0.0.8", "240.0.0.1", "255.255.255.255"} {
+		if isPublic(ip) {
+			t.Errorf("isPublic(%s) = true, want false", ip)
+		}
+	}
+}

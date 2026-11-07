@@ -171,7 +171,7 @@ export function ConnectionForm({
               ) : (
                 <FieldDescription>
                   {mode === "edit" && connection
-                    ? `Leave empty to keep the current secret (${connection.secretHint}).`
+                    ? `Leave empty to keep the current secret (${connection.secretHint}). Required if you change a URL.`
                     : "Encrypted at rest and never shown again; only its last 4 characters are kept visible."}
                 </FieldDescription>
               )}

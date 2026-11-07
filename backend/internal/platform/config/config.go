@@ -49,10 +49,8 @@ func Load() (Config, error) {
 	if cfg.AllowPrivateNetwork, err = boolEnv("ALLOW_PRIVATE_NETWORK", false); err != nil {
 		return Config{}, err
 	}
+	// Required by `serve` (validated when the server is built), not by `migrate`.
 	cfg.SecretKey = os.Getenv("SECRET_KEY")
-	if cfg.SecretKey == "" {
-		return Config{}, fmt.Errorf("config SECRET_KEY is required: a base64 32-byte key, e.g. `openssl rand -base64 32`")
-	}
 	return cfg, nil
 }
 

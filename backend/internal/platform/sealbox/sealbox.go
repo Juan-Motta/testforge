@@ -27,7 +27,7 @@ type Box struct {
 func New(base64Key string) (*Box, error) {
 	key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(base64Key))
 	if err != nil || len(key) != 32 {
-		return nil, errors.New("sealbox: key must be 32 bytes, base64-encoded (generate one with `openssl rand -base64 32`)")
+		return nil, errors.New("SECRET_KEY must be a base64-encoded 32-byte key (generate one with `openssl rand -base64 32`)")
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {

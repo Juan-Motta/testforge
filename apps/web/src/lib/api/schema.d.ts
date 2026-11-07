@@ -181,8 +181,11 @@ export interface paths {
         head?: never;
         /**
          * @description Owner or admin. Omitted properties keep their value; an omitted or
-         *     empty `secret` keeps the stored secret. `config` replaces the whole
-         *     config. The kind cannot change. Clears `lastTest`.
+         *     empty `secret` keeps the stored secret, except when a URL field
+         *     changes: then `secret` is required (422 on `secret`), so a stored
+         *     credential is only ever sent to the hosts it was entered for.
+         *     `config` replaces the whole config. The kind cannot change. Clears
+         *     `lastTest`. Provider tests never follow redirects to another host.
          */
         patch: operations["updateConnection"];
         trace?: never;

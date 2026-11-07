@@ -22,7 +22,18 @@ import (
 // ErrBlocked is returned (wrapped) when a destination is not allowed.
 var ErrBlocked = errors.New("destination is a private network address")
 
-var cgnat = netip.MustParsePrefix("100.64.0.0/10")
+// blockedPrefixes are non-public ranges that netip's helpers do not cover.
+var blockedPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),      // "this network"
+	netip.MustParsePrefix("100.64.0.0/10"),  // carrier-grade NAT
+	netip.MustParsePrefix("192.0.0.0/24"),   // IETF protocol assignments
+	netip.MustParsePrefix("198.18.0.0/15"),  // benchmarking
+	netip.MustParsePrefix("240.0.0.0/4"),    // reserved, includes broadcast
+	netip.MustParsePrefix("::/96"),          // IPv4-compatible IPv6
+	netip.MustParsePrefix("64:ff9b::/96"),   // NAT64 to IPv4
+	netip.MustParsePrefix("64:ff9b:1::/48"), // local-use NAT64
+	netip.MustParsePrefix("fec0::/10"),      // deprecated site-local
+}
 
 // CheckURL validates and normalizes a base URL: absolute, https (http only
 // when allowPrivate), a host, no credentials, query or fragment, no trailing slash.
@@ -72,6 +83,11 @@ func NewClient(allowPrivate bool, timeout time.Duration) *http.Client {
 			if len(via) >= 3 {
 				return errors.New("too many redirects")
 			}
+			// Provider auth headers such as X-Api-Key survive cross-host redirects in
+			// net/http, so never follow one: the credential must reach only its host.
+			if req.URL.Host != via[0].URL.Host {
+				return fmt.Errorf("refused a redirect to another host (%s)", req.URL.Hostname())
+			}
 			if req.URL.Scheme != "https" && !allowPrivate {
 				return fmt.Errorf("%w: redirect to %s", ErrBlocked, req.URL.Scheme)
 			}
@@ -87,5 +103,14 @@ func isPublic(host string) bool {
 	}
 	addr = addr.Unmap()
 	return !(addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() ||
-		addr.IsMulticast() || addr.IsUnspecified() || addr.IsInterfaceLocalMulticast() || cgnat.Contains(addr))
+		addr.IsMulticast() || addr.IsUnspecified() || addr.IsInterfaceLocalMulticast() || inBlocked(addr))
+}
+
+func inBlocked(addr netip.Addr) bool {
+	for _, p := range blockedPrefixes {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }

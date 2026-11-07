@@ -167,6 +167,11 @@ func (s *Service) Update(ctx context.Context, ws workspace.Workspace, id string,
 		newSecret = strings.TrimSpace(*in.Secret)
 		validateSecret(newSecret, false, fields)
 	}
+	// A stored secret is only ever sent to the URLs it was entered for. Moving
+	// it to another host requires knowing it, so admins cannot exfiltrate it.
+	if newSecret == "" && urlChanged(spec, current.Config, cfg) {
+		fields["secret"] = "Enter the secret again when you change a URL."
+	}
 	if err := apperr.Invalid(fields); err != nil {
 		return Connection{}, err
 	}
@@ -284,11 +289,21 @@ func sealContext(workspaceID, id string, kind Kind) string {
 	return "connection/" + workspaceID + "/" + id + "/" + string(kind)
 }
 
+func urlChanged(spec KindSpec, before, after map[string]string) bool {
+	for _, f := range spec.Fields {
+		if f.Type == FieldURL && before[f.Key] != after[f.Key] {
+			return true
+		}
+	}
+	return false
+}
+
 func secretHint(secret string) string {
-	if len(secret) < 8 {
+	runes := []rune(secret)
+	if len(runes) < 8 {
 		return "••••"
 	}
-	return "•••• " + secret[len(secret)-4:]
+	return "•••• " + string(runes[len(runes)-4:])
 }
 
 func newID() (string, error) {
