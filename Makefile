@@ -1,4 +1,4 @@
-.PHONY: help db-up db-down api web test test-api lint-api build-api migrate
+.PHONY: help db-up db-down api worker web test test-api lint-api build-api migrate
 
 # Development-only defaults. Never use this key outside your machine; set your own
 # SECRET_KEY (openssl rand -base64 32) and leave ALLOW_PRIVATE_NETWORK unset in production.
@@ -16,6 +16,9 @@ db-down: ## Stop local services
 
 api: db-up ## Run the Go API on :8080
 	cd backend && go run ./cmd/api serve
+
+worker: db-up ## Run the run worker (executes queued runs)
+	cd backend && go run ./cmd/worker
 
 migrate: db-up ## Apply database migrations
 	cd backend && go run ./cmd/api migrate

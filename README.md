@@ -17,6 +17,7 @@ and [backend/api/openapi.yaml](backend/api/openapi.yaml) for the API contract.
 ```bash
 make db-up      # Postgres on localhost:5433
 make api        # Go API on :8080 (applies migrations)
+make worker     # executes queued runs (separate terminal)
 pnpm install
 make web        # Next.js on :3000, proxies /api to the Go API
 ```
@@ -37,6 +38,8 @@ The API reads environment variables; defaults suit local development.
 | `LOG_FORMAT` | `text` | `text` or `json` |
 | `SECRET_KEY` | required (`make api` sets a dev-only key) | Base64 32-byte key that encrypts provider credentials. Generate with `openssl rand -base64 32`; losing it makes stored secrets unreadable |
 | `ALLOW_PRIVATE_NETWORK` | `false` (`make api` sets `true`) | Let provider URLs use `http` and private addresses, e.g. a local Langfuse. Keep `false` in production |
+| `ARTIFACTS_DIR` | `./data/artifacts` | Where the worker stores run audio (API and worker must share it) |
+| `WORKER_CONCURRENCY` | `3` | Runs one worker process executes at a time |
 | `TEST_DATABASE_URL` | `postgres://testforge:testforge@localhost:5433/postgres?sslmode=disable` | Server where tests create throwaway databases |
 
 The web app reads `API_URL` (default `http://localhost:8080`). `next dev` reads it at startup; for `next build`/`next start` the rewrite destination is fixed at **build** time, so set `API_URL` when building.
