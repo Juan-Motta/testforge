@@ -214,6 +214,9 @@ func TestRunsExecuteAndStream(t *testing.T) {
 	}
 	stream, _ := io.ReadAll(res.Body)
 	res.Body.Close()
+	if cc := res.Header.Get("Cache-Control"); cc != "no-cache, no-transform" {
+		t.Fatalf("events Cache-Control = %q", cc)
+	}
 	for _, part := range []string{"event: status", `"status":"running"`, "event: transcript", "event: log", "event: metrics", `"status":"completed"`, "event: end"} {
 		if !strings.Contains(string(stream), part) {
 			t.Fatalf("stream missing %q:\n%s", part, stream)

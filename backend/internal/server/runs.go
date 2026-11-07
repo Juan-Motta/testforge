@@ -117,7 +117,8 @@ func (s *server) runEvents(w http.ResponseWriter, r *http.Request, _ authn.Princ
 	_ = rc.SetWriteDeadline(time.Time{}) // the stream outlives the server's write timeout
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")
-	h.Set("Cache-Control", "no-cache")
+	// no-transform stops proxies (including the Next.js rewrite) from gzipping and buffering the stream.
+	h.Set("Cache-Control", "no-cache, no-transform")
 	h.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 

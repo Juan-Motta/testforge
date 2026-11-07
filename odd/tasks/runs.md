@@ -25,8 +25,8 @@ Out of scope: realtime (speech-to-speech) simulator, STT of agent audio, LLM jud
 | T1 | S1-S9 | inline | done | contract in `backend/api/openapi.yaml` |
 | T2 | S1, S2, S6-S8 | inline | done | 5 integration tests with fake engines (written with the code; RED not observed separately); `-race` clean |
 | T3 | S3, S4 | inline | done | text engine E2E through the worker with fake OpenAI and Anthropic (official SDK) servers and a fake chat agent; max turns and broken simulator cases |
-| T4 | S5, S6 (audio) | inline | pending | |
-| T5 | S9 | delegated (parallel with T2-T4: disjoint surface `apps/web/**`) | pending | |
+| T4 | S5, S6 (audio) | inline | done | audio RED→GREEN; TTS tests; voice E2E vs fake Vivi Live (agent first, 4 turns, latency, 3 WAV tracks, voice.close) and fake OpenAI Realtime with interruption (truncate ~600 ms); `-race` clean |
+| T5 | S9 | delegated (parallel with T2-T4: disjoint surface `apps/web/**`) | done | 108 Vitest tests; lint/typecheck/build green; mock click-through incl. SSE |
 | T6 | S1-S9 | inline E2E + independent verifier (Risk item 4: concurrency/leases; item 2: provider credentials) | pending | |
 
 ## Log
@@ -35,3 +35,4 @@ Out of scope: realtime (speech-to-speech) simulator, STT of agent audio, LLM jud
 - **L2** (2026-11-07, user): "Sí, Runs".
 - **L3** (2026-11-07): Legacy runner: in-process asyncio tasks (lost on restart), global semaphore 3 + per-batch semaphore, caller mic 100 ms frames with silence fill and resync, 600 ms trailing silence, turn end 900 ms silence gap or response.done + 1200 ms settle, playback grace 400 ms, max silence 15 s, caller prompt sections and `{say, hangUp, reason}` schema. Decisions: the runs table is the queue (no extra dependency instead of River); realtime simulator deferred; transcript from agent events (no STT); local artifact storage behind an interface.
 - **L4** (2026-11-07): Queue claims lock each candidate batch row with `FOR UPDATE SKIP LOCKED` (strict per-batch concurrency without lock-order deadlocks). SSE disables the server write deadline through `http.ResponseController` (the logging middleware now implements `Unwrap`) and compacts jsonb event data. `WORKER_CONCURRENCY` is per worker process.
+- **L5** (2026-11-07): Voice engine fixes found by E2E tests: latency is measured from the end of speech (a `speechDone` microphone event before trailing silence), the user hangs up right after speaking, and an agent turn that starts while the user speaks is closed after the user finishes. The web writer found that the Next.js rewrite gzips `text/event-stream` and buffers it; the SSE handler now sends `Cache-Control: no-cache, no-transform`.
