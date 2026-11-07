@@ -481,3 +481,95 @@ func TestProbeFailuresAndPrivateNetwork(t *testing.T) {
 		t.Fatalf("locked probe = %v", r.body)
 	}
 }
+
+func TestTextProbeHonorsDuration(t *testing.T) {
+	e := newEnv(t)
+	owner, slug := ownerWorkspace(t, e)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(5 * time.Second):
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(srv.Close)
+	body := map[string]any{
+		"name": "Slow", "description": "", "modality": "text",
+		"transport": map[string]any{"url": srv.URL + "/chat", "query": []any{}, "headers": []any{},
+			"body": `{"message":"{{message}}"}`, "initMessages": []any{}, "preSession": nil},
+		"codec": map[string]any{"type": "http_json", "options": map[string]any{}}, "variables": []any{}, "secrets": []any{},
+		"traceConnectionId": nil, "traceSessionId": "",
+	}
+	agent := createAgent(t, owner, slug, body)
+	start := time.Now()
+	r := owner.do("POST", "/api/v1/workspaces/"+slug+"/agents/"+agent["id"].(string)+"/probe", map[string]any{"durationSeconds": 1})
+	if r.body["ok"] != false || time.Since(start) > 3*time.Second {
+		t.Fatalf("probe took %s: %v", time.Since(start), r.body)
+	}
+}
+
+// echoAgent is a Vivi Live agent that repeats the key it received in transcripts,
+// errors and its URL-escaped form, to check every output is redacted.
+func TestProbeRedactsEchoedSecretsEverywhere(t *testing.T) {
+	e := newEnv(t)
+	owner, slug := ownerWorkspace(t, e)
+	secret := "eyJhbGciOiJIUzI1NiJ9/QQQQQQQQQQ+QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ=="
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.CloseNow()
+		key := r.Header.Get("X-Key")
+		send := func(v any) { b, _ := json.Marshal(v); _ = c.Write(r.Context(), websocket.MessageText, b) }
+		send(map[string]any{"type": "voice.ready"})
+		send(map[string]any{"type": "voice.transcript.update", "role": "assistant", "messageId": "m1", "text": "your key is " + key})
+		send(map[string]any{"type": "voice.error", "message": strings.Repeat("x", 250) + " key " + key})
+		send(map[string]any{"type": "debug", "path": r.URL.EscapedPath()})
+		for {
+			if _, _, err := c.Read(r.Context()); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	body := viviLiveAgent(wsURL(srv))
+	body["transport"].(map[string]any)["url"] = wsURL(srv) + "/live/{{secret.api_key}}"
+	body["transport"].(map[string]any)["headers"] = []any{map[string]any{"key": "X-Key", "value": "{{secret.api_key}}"}}
+	body["secrets"] = []any{map[string]any{"name": "api_key", "value": secret}}
+	agent := createAgent(t, owner, slug, body)
+	r := owner.do("POST", "/api/v1/workspaces/"+slug+"/agents/"+agent["id"].(string)+"/probe", map[string]any{"durationSeconds": 1})
+	raw, _ := json.Marshal(r.body)
+	for _, leak := range []string{secret[:16], strings.ReplaceAll(secret[:24], "/", "%2F")} {
+		if strings.Contains(string(raw), leak) {
+			t.Fatalf("probe result contains %q: %s", leak, raw)
+		}
+	}
+}
+
+func TestSecretReachingANewHostRequiresReentry(t *testing.T) {
+	e := newEnv(t)
+	owner, slug := ownerWorkspace(t, e)
+	body := viviLiveAgent("wss://agents.example.com")
+	item := "/api/v1/workspaces/" + slug + "/agents/" + createAgent(t, owner, slug, body)["id"].(string)
+	keep := []any{map[string]any{"name": "api_key", "value": ""}}
+
+	// Same host, new path: the secret still only reaches agents.example.com.
+	samePath := clone(body)
+	samePath["secrets"] = keep
+	samePath["transport"].(map[string]any)["url"] = "wss://agents.example.com/v2/{{var.channelId}}"
+	expectStatus(t, owner.do("PUT", item, samePath), http.StatusOK)
+
+	// Moving the secret reference into a pre-session on another host.
+	moved := clone(samePath)
+	moved["transport"].(map[string]any)["headers"] = []any{}
+	moved["transport"].(map[string]any)["preSession"] = map[string]any{
+		"method": "POST", "url": "https://collector.example.net/s", "body": nil, "captures": []any{},
+		"headers": []any{map[string]any{"key": "X-Key", "value": "{{secret.api_key}}"}},
+	}
+	r := owner.do("PUT", item, moved)
+	expectStatus(t, r, http.StatusUnprocessableEntity)
+	if r.body["error"].(map[string]any)["fields"].(map[string]any)["secrets"] == nil {
+		t.Fatalf("want secrets error, got %v", r.body)
+	}
+}

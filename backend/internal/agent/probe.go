@@ -72,6 +72,10 @@ func (r *probeRun) log(kind, format string, args ...any) {
 	r.res.Events = append(r.res.Events, ProbeEvent{AtMs: int(time.Since(r.start).Milliseconds()), Kind: kind, Detail: detail})
 }
 
+// clip redacts untrusted text before truncating it, so a secret cut at the
+// limit cannot leak its first characters.
+func (r *probeRun) clip(s string, n int) string { return truncate(r.redact.Redact(s), n) }
+
 func (r *probeRun) fail(summary string) ProbeResult {
 	r.log("error", "%s", summary)
 	r.res.OK = false
@@ -147,7 +151,7 @@ func (p *Prober) preSession(ctx context.Context, run *probeRun, ps *PreSession) 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	run.log("send", "Pre-session %s %s", ps.Method, displayURL(target))
+	run.log("send", "Pre-session %s %s", ps.Method, run.displayURL(target))
 	res, err := egress.NewClient(p.allowPrivate, connectTimeout).Do(req)
 	if err != nil {
 		return err
@@ -169,7 +173,7 @@ func (p *Prober) preSession(ctx context.Context, run *probeRun, ps *PreSession) 
 			return fmt.Errorf("the pre-session response has no value at %q", c.Path)
 		}
 		run.vals["session."+c.Name] = s
-		run.log("info", "Captured {{session.%s}} = %s", c.Name, truncate(s, 80))
+		run.log("info", "Captured {{session.%s}} = %s", c.Name, run.clip(s, 80))
 	}
 	return nil
 }
@@ -211,9 +215,9 @@ func (p *Prober) voice(ctx context.Context, run *probeRun, a Agent, duration tim
 		return run.fail(describe(err))
 	}
 	defer conn.CloseNow()
-	conn.SetReadLimit(8 << 20)
+	conn.SetReadLimit(1 << 20)
 	connectedMs := int(time.Since(run.start).Milliseconds())
-	run.log("connect", "Connected to %s in %d ms", displayURL(target), connectedMs)
+	run.log("connect", "Connected to %s in %d ms", run.displayURL(target), connectedMs)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -231,12 +235,12 @@ func (p *Prober) voice(ctx context.Context, run *probeRun, a Agent, duration tim
 		return nil
 	}
 	for _, m := range inits {
-		if err := write(codec.Frame{Data: []byte(m)}, "Initial message "+frameSummary([]byte(m))); err != nil {
+		if err := write(codec.Frame{Data: []byte(m)}, "Initial message "+run.frameSummary([]byte(m))); err != nil {
 			return run.fail(describe(err))
 		}
 	}
 
-	frames := make(chan codec.Frame, 64)
+	frames := make(chan codec.Frame, 16)
 	readErr := make(chan error, 1)
 	go func() {
 		for {
@@ -285,7 +289,7 @@ loop:
 	if !closed {
 		closeFrames, awaitAck := vc.Close()
 		for _, f := range closeFrames {
-			_ = write(f, "Close message "+frameSummary(f.Data))
+			_ = write(f, "Close message "+run.frameSummary(f.Data))
 		}
 		if awaitAck {
 			ack := time.NewTimer(closeAckWait)
@@ -311,7 +315,7 @@ loop:
 
 	rate := vc.SampleRate()
 	run.res.AudioMs = st.audioBytes * 1000 / (2 * rate)
-	run.res.Transcript = st.transcript()
+	run.res.Transcript = run.redact.Redact(st.transcript())
 	run.res.OK = st.errors == 0 && (st.ready || st.audioBytes > 0 || run.res.Transcript != "")
 	run.res.Summary = run.redact.Redact(voiceSummary(connectedMs, st, run.res))
 	return run.finish()
@@ -364,7 +368,7 @@ func (p *Prober) handle(run *probeRun, vc codec.Voice, st *voiceState, f codec.F
 			}
 			run.log("ready", "Session ready (%s)", e.Type)
 			for _, out := range vc.OnReady() {
-				_ = write(out, "Ready message "+frameSummary(out.Data))
+				_ = write(out, "Ready message "+run.frameSummary(out.Data))
 			}
 		case codec.KindAudio:
 			if st.audioChunks == 0 {
@@ -376,17 +380,17 @@ func (p *Prober) handle(run *probeRun, vc codec.Voice, st *voiceState, f codec.F
 			if e.Role == codec.RoleAgent {
 				st.addTranscript(e)
 			}
-			run.log("transcript", "%s: %s", e.Role, truncate(e.Text, 200))
+			run.log("transcript", "%s: %s", e.Role, run.clip(e.Text, 200))
 		case codec.KindError:
 			st.errors++
-			run.log("error", "Agent error (%s): %s", e.Type, truncate(e.Text, 300))
+			run.log("error", "Agent error (%s): %s", e.Type, run.clip(e.Text, 300))
 		case codec.KindClosed:
 			run.log("close", "Session closed by the agent (%s)", e.Type)
 			return true
 		case codec.KindTurnDone, codec.KindBusy:
 			run.log("receive", "%s", e.Type)
 		default:
-			run.log("receive", "%s", frameSummary(f.Data))
+			run.log("receive", "%s", run.frameSummary(f.Data))
 		}
 	}
 	return false
@@ -404,7 +408,7 @@ func voiceSummary(connectedMs int, st *voiceState, res *ProbeResult) string {
 		b.WriteString(" No agent audio received.")
 	}
 	if res.Transcript != "" {
-		fmt.Fprintf(&b, " Agent said: “%s”.", truncate(res.Transcript, 120))
+		fmt.Fprintf(&b, " Agent said: “%s”.", truncate(res.Transcript, 120)) // res.Transcript is redacted
 	}
 	if st.errors > 0 {
 		fmt.Fprintf(&b, " %d error(s) reported.", st.errors)
@@ -434,7 +438,7 @@ func (p *Prober) text(ctx context.Context, run *probeRun, a Agent, message strin
 			return run.fail(err.Error())
 		}
 	}
-	timeout := max(duration, 30*time.Second)
+	timeout := duration
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader([]byte(body)))
@@ -446,7 +450,7 @@ func (p *Prober) text(ctx context.Context, run *probeRun, a Agent, message strin
 	if err := setHeaders(req.Header, a.Transport.Headers, run.vals); err != nil {
 		return run.fail(err.Error())
 	}
-	run.log("send", "POST %s: %q", displayURL(target), truncate(message, 200))
+	run.log("send", "POST %s: %q", run.displayURL(target), run.clip(message, 200))
 	res, err := egress.NewClient(p.allowPrivate, timeout).Do(req)
 	if err != nil {
 		return run.fail(describe(err))
@@ -454,21 +458,21 @@ func (p *Prober) text(ctx context.Context, run *probeRun, a Agent, message strin
 	defer res.Body.Close()
 	run.log("receive", "HTTP %d %s", res.StatusCode, res.Header.Get("Content-Type"))
 	if res.StatusCode >= 300 {
-		snippet, _ := io.ReadAll(io.LimitReader(res.Body, 300))
-		return run.fail(fmt.Sprintf("The agent answered HTTP %d: %s", res.StatusCode, strings.TrimSpace(string(snippet))))
+		snippet, _ := io.ReadAll(io.LimitReader(res.Body, 8192))
+		return run.fail(fmt.Sprintf("The agent answered HTTP %d: %s", res.StatusCode, run.clip(strings.TrimSpace(string(snippet)), 300)))
 	}
-	reply, err := tc.ReadReply(res, func(kind codec.Kind, detail string) { run.log("receive", "%s", detail) })
+	reply, err := tc.ReadReply(res, func(kind codec.Kind, detail string) { run.log("receive", "%s", run.clip(detail, 200)) })
 	run.res.Reply = run.redact.Redact(reply)
 	if err != nil {
 		return run.fail("Could not read the reply: " + err.Error())
 	}
 	elapsed := time.Since(run.start).Milliseconds()
-	run.log("reply", "%s", truncate(reply, 500))
+	run.log("reply", "%s", run.clip(reply, 500))
 	if strings.TrimSpace(reply) == "" {
 		return run.fail("The agent answered with an empty reply.")
 	}
 	run.res.OK = true
-	run.res.Summary = run.redact.Redact(fmt.Sprintf("Replied in %d ms: “%s”.", elapsed, truncate(reply, 120)))
+	run.res.Summary = fmt.Sprintf("Replied in %d ms: “%s”.", elapsed, run.clip(reply, 120))
 	return run.finish()
 }
 
@@ -479,6 +483,11 @@ func buildURL(raw string, query []KV, vals tmpl.Values) (string, error) {
 	renderedPath, err := render("/"+path, vals, tmpl.Path)
 	if err != nil {
 		return "", err
+	}
+	for _, seg := range strings.Split(renderedPath, "/") {
+		if seg == "." || seg == ".." {
+			return "", errors.New("the URL path would contain a . or .. segment")
+		}
 	}
 	target := scheme + "://" + host + strings.TrimSuffix(renderedPath, "/")
 	if renderedPath == "/" {
@@ -530,6 +539,14 @@ func scalar(v any) (string, bool) {
 		return strconv.FormatBool(t), true
 	}
 	return "", false
+}
+
+// displayURL drops the query string and redacts secrets in the path.
+func (r *probeRun) displayURL(raw string) string { return r.redact.Redact(displayURL(raw)) }
+
+// frameSummary redacts a frame before summarizing it.
+func (r *probeRun) frameSummary(data []byte) string {
+	return frameSummary([]byte(r.redact.Redact(string(data))))
 }
 
 // displayURL drops the query string, which may carry secrets or ids.

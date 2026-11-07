@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"testforge/internal/agent/tmpl"
 	"testforge/internal/authn"
 	"testforge/internal/connection"
 	"testforge/internal/platform/apperr"
@@ -128,15 +130,19 @@ func (s *Service) Update(ctx context.Context, ws workspace.Workspace, id string,
 	for _, st := range stored {
 		byName[st.Name] = st
 	}
-	moved := urlsChanged(current.Transport, in.Transport)
+	before, after := secretHosts(current.Transport), secretHosts(in.Transport)
 	for i, sec := range in.Secrets {
 		if sec.Value != "" {
 			continue
 		}
 		if _, kept := byName[sec.Name]; !kept {
 			setOnce(fields, fmt.Sprintf("secrets.%d.value", i), "Enter a value for this new secret.")
-		} else if moved {
-			setOnce(fields, "secrets", "Enter every secret again when you change the agent or pre-session URL.")
+			continue
+		}
+		for host := range after[sec.Name] {
+			if !before[sec.Name][host] {
+				setOnce(fields, "secrets", fmt.Sprintf("Enter {{secret.%s}} again: it would now be sent to %s.", sec.Name, host))
+			}
 		}
 	}
 	if err := s.checkTraceConnection(ctx, ws, in.TraceConnectionID, fields); err != nil {
@@ -199,7 +205,11 @@ func (s *Service) Probe(ctx context.Context, ws workspace.Workspace, id string, 
 		return ProbeResult{}, err
 	}
 	fields := map[string]string{}
+	// Text agents may think for a while; voice probes only need to hear the greeting.
 	duration := 8 * time.Second
+	if a.Modality == ModalityText {
+		duration = 30 * time.Second
+	}
 	if req.DurationSeconds != nil {
 		if *req.DurationSeconds < 1 || *req.DurationSeconds > 30 {
 			fields["durationSeconds"] = "Choose between 1 and 30 seconds."
@@ -224,6 +234,10 @@ func (s *Service) Probe(ctx context.Context, ws workspace.Workspace, id string, 
 		}
 		secrets[st.Name] = plain
 	}
+	// Bound the whole probe (pre-session, dial, listening, close) below the
+	// server's write timeout so the client always gets an answer.
+	ctx, cancel := context.WithTimeout(ctx, duration+20*time.Second)
+	defer cancel()
 	return s.prober.Run(ctx, a, secrets, message, duration), nil
 }
 
@@ -267,18 +281,54 @@ func (s *Service) sealSecrets(wsID, id string, in []SecretInput, keep map[string
 	return out, nil
 }
 
-func urlsChanged(before, after Transport) bool {
-	if before.URL != after.URL {
-		return true
+// secretHosts maps each referenced secret to the hosts it is sent to. A stored
+// secret may only reach hosts it was already sent to; anything else requires
+// entering it again, so an admin cannot redirect a credential they cannot read.
+func secretHosts(t Transport) map[string]map[string]bool {
+	out := map[string]map[string]bool{}
+	add := func(host string, templates ...string) {
+		for _, raw := range templates {
+			parsed, err := tmpl.Parse(raw)
+			if err != nil {
+				continue
+			}
+			for _, r := range parsed.Refs() {
+				if r.NS == tmpl.NSSecret {
+					if out[r.Name] == nil {
+						out[r.Name] = map[string]bool{}
+					}
+					out[r.Name][host] = true
+				}
+			}
+		}
 	}
-	b, a := "", ""
-	if before.PreSession != nil {
-		b = before.PreSession.URL
+	host := urlHost(t.URL)
+	add(host, t.URL)
+	for _, kv := range append(append([]KV{}, t.Query...), t.Headers...) {
+		add(host, kv.Value)
 	}
-	if after.PreSession != nil {
-		a = after.PreSession.URL
+	if t.Body != nil {
+		add(host, *t.Body)
 	}
-	return a != b
+	add(host, t.InitMessages...)
+	if ps := t.PreSession; ps != nil {
+		psHost := urlHost(ps.URL)
+		add(psHost, ps.URL)
+		for _, kv := range ps.Headers {
+			add(psHost, kv.Value)
+		}
+		if ps.Body != nil {
+			add(psHost, *ps.Body)
+		}
+	}
+	return out
+}
+
+// urlHost returns the lower-cased "scheme://host" of a URL template.
+func urlHost(raw string) string {
+	scheme, rest, _ := strings.Cut(strings.TrimSpace(raw), "://")
+	host, _, _ := strings.Cut(rest, "/")
+	return strings.ToLower(scheme + "://" + host)
 }
 
 func canManage(ws workspace.Workspace) error {

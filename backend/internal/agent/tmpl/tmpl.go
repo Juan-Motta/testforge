@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -131,8 +132,16 @@ type Escaper func(string) string
 // Raw inserts values unchanged (headers, query values before URL encoding).
 func Raw(s string) string { return s }
 
-// Path escapes a value for a URL path segment.
-func Path(s string) string { return url.PathEscape(s) }
+// Path escapes a value for a URL path segment. Values made only of dots are
+// escaped too, so "." and ".." cannot traverse to another path.
+func Path(s string) string {
+	if s != "" && strings.Trim(s, ".") == "" && len(s) <= 2 {
+		return strings.Repeat("%2E", len(s))
+	}
+	return url.PathEscape(s)
+}
+
+func queryEscape(s string) string { return url.QueryEscape(s) }
 
 // JSON escapes a value for the inside of a JSON string literal.
 func JSON(s string) string {
@@ -168,7 +177,12 @@ func NewRedactor(secrets []string) *Redactor {
 	r := &Redactor{}
 	for _, s := range secrets {
 		if len(s) >= 4 {
-			r.secrets = append(r.secrets, s, JSON(s))
+			// Every form a secret can take in a request or an echoed response.
+			for _, form := range []string{s, JSON(s), Path(s), queryEscape(s)} {
+				if !slices.Contains(r.secrets, form) {
+					r.secrets = append(r.secrets, form)
+				}
+			}
 		}
 	}
 	return r

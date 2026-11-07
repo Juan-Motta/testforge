@@ -87,3 +87,21 @@ func TestNestedJSONClosingBracesAreLiteral(t *testing.T) {
 		t.Fatalf("render = %q", got)
 	}
 }
+
+func TestRedactorCoversURLEscapedForms(t *testing.T) {
+	secret := "tok/AbCdEf+GhIj=="
+	r := NewRedactor([]string{secret})
+	for _, form := range []string{secret, Path(secret), JSON(secret), queryEscape(secret)} {
+		if got := r.Redact("x " + form + " y"); got != "x •••• y" {
+			t.Errorf("Redact(%q) = %q", form, got)
+		}
+	}
+}
+
+func TestPathEscapesDotSegments(t *testing.T) {
+	for in, want := range map[string]string{"..": "%2E%2E", ".": "%2E", "a.b": "a.b", "...": "..."} {
+		if got := Path(in); got != want {
+			t.Errorf("Path(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
