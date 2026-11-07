@@ -3,6 +3,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -27,11 +28,35 @@ type env struct {
 	pool *pgxpool.Pool
 }
 
+type configOverride struct {
+	allowPrivate bool
+}
+
 func newEnv(t *testing.T) *env {
 	t.Helper()
+	return newEnvWith(t, nil)
+}
+
+// newEnvWith builds a server; tests allow private networking by default so
+// fake providers on httptest (loopback) are reachable.
+func newEnvWith(t *testing.T, mutate func(*configOverride)) *env {
+	t.Helper()
+	o := configOverride{allowPrivate: true}
+	if mutate != nil {
+		mutate(&o)
+	}
 	pool := dbtest.New(t)
-	cfg := config.Config{AppOrigins: []string{appOrigin}, SessionTTL: time.Hour}
-	srv := httptest.NewServer(server.New(pool, cfg))
+	cfg := config.Config{
+		AppOrigins:          []string{appOrigin},
+		SessionTTL:          time.Hour,
+		SecretKey:           base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{42}, 32)),
+		AllowPrivateNetwork: o.allowPrivate,
+	}
+	handler, err := server.New(pool, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	return &env{t: t, srv: srv, pool: pool}
 }

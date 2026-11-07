@@ -18,6 +18,11 @@ type Config struct {
 	AutoMigrate  bool
 	LogFormat    string
 	SessionTTL   time.Duration
+	// SecretKey is the base64 32-byte key that encrypts provider credentials.
+	SecretKey string
+	// AllowPrivateNetwork lets provider URLs use http and private addresses
+	// (local development only).
+	AllowPrivateNetwork bool
 }
 
 // Load reads the configuration, applying development defaults.
@@ -40,6 +45,13 @@ func Load() (Config, error) {
 	}
 	if cfg.AutoMigrate, err = boolEnv("AUTO_MIGRATE", true); err != nil {
 		return Config{}, err
+	}
+	if cfg.AllowPrivateNetwork, err = boolEnv("ALLOW_PRIVATE_NETWORK", false); err != nil {
+		return Config{}, err
+	}
+	cfg.SecretKey = os.Getenv("SECRET_KEY")
+	if cfg.SecretKey == "" {
+		return Config{}, fmt.Errorf("config SECRET_KEY is required: a base64 32-byte key, e.g. `openssl rand -base64 32`")
 	}
 	return cfg, nil
 }

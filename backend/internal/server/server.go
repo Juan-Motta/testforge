@@ -13,10 +13,12 @@ import (
 
 	"testforge/internal/apikey"
 	"testforge/internal/authn"
+	"testforge/internal/connection"
 	"testforge/internal/identity"
 	"testforge/internal/platform/apperr"
 	"testforge/internal/platform/config"
 	"testforge/internal/platform/httpx"
+	"testforge/internal/platform/sealbox"
 	"testforge/internal/workspace"
 )
 
@@ -28,15 +30,21 @@ type server struct {
 	identity   *identity.Service
 	workspaces *workspace.Service
 	apiKeys    *apikey.Service
+	conns      *connection.Service
 }
 
-// New builds the API handler.
-func New(pool *pgxpool.Pool, cfg config.Config) http.Handler {
+// New builds the API handler. It fails when the secret key is invalid.
+func New(pool *pgxpool.Pool, cfg config.Config) (http.Handler, error) {
+	box, err := sealbox.New(cfg.SecretKey)
+	if err != nil {
+		return nil, err
+	}
 	s := &server{
 		cfg:        cfg,
 		pool:       pool,
 		workspaces: workspace.NewService(pool),
 		apiKeys:    apikey.NewService(pool),
+		conns:      connection.NewService(pool, box, cfg.AllowPrivateNetwork),
 	}
 	s.identity = identity.NewService(pool, cfg.SessionTTL, func(ctx context.Context, tx pgx.Tx, u identity.User) error {
 		return workspace.CreatePersonal(ctx, tx, u.ID, u.Name)
@@ -57,11 +65,19 @@ func New(pool *pgxpool.Pool, cfg config.Config) http.Handler {
 	mux.Handle("POST /api/v1/workspaces/{slug}/api-keys", s.inWorkspace(s.createAPIKey))
 	mux.Handle("DELETE /api/v1/workspaces/{slug}/api-keys/{keyId}", s.inWorkspace(s.revokeAPIKey))
 
+	mux.Handle("GET /api/v1/connection-kinds", s.authed(s.listConnectionKinds))
+	mux.Handle("GET /api/v1/workspaces/{slug}/connections", s.inWorkspace(s.listConnections))
+	mux.Handle("POST /api/v1/workspaces/{slug}/connections", s.inWorkspace(s.createConnection))
+	mux.Handle("GET /api/v1/workspaces/{slug}/connections/{id}", s.inWorkspace(s.getConnection))
+	mux.Handle("PATCH /api/v1/workspaces/{slug}/connections/{id}", s.inWorkspace(s.updateConnection))
+	mux.Handle("DELETE /api/v1/workspaces/{slug}/connections/{id}", s.inWorkspace(s.deleteConnection))
+	mux.Handle("POST /api/v1/workspaces/{slug}/connections/{id}/test", s.inWorkspace(s.testConnection))
+
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, apperr.NotFound("Route not found."))
 	})
 
-	return httpx.Recover(httpx.Logging(s.authenticate(s.checkOrigin(mux))))
+	return httpx.Recover(httpx.Logging(s.authenticate(s.checkOrigin(mux)))), nil
 }
 
 // authenticate resolves the principal from a bearer API key or the session

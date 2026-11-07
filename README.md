@@ -35,6 +35,8 @@ The API reads environment variables; defaults suit local development.
 | `COOKIE_SECURE` | `false` | Mark the session cookie `Secure` (set `true` behind HTTPS) |
 | `AUTO_MIGRATE` | `true` | Apply migrations when `serve` starts |
 | `LOG_FORMAT` | `text` | `text` or `json` |
+| `SECRET_KEY` | required (`make api` sets a dev-only key) | Base64 32-byte key that encrypts provider credentials. Generate with `openssl rand -base64 32`; losing it makes stored secrets unreadable |
+| `ALLOW_PRIVATE_NETWORK` | `false` (`make api` sets `true`) | Let provider URLs use `http` and private addresses, e.g. a local Langfuse. Keep `false` in production |
 | `TEST_DATABASE_URL` | `postgres://testforge:testforge@localhost:5433/postgres?sslmode=disable` | Server where tests create throwaway databases |
 
 The web app reads `API_URL` (default `http://localhost:8080`).

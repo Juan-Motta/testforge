@@ -63,7 +63,11 @@ func run() error {
 				return err
 			}
 		}
-		return serve(ctx, cfg, server.New(pool, cfg))
+		handler, err := server.New(pool, cfg)
+		if err != nil {
+			return err
+		}
+		return serve(ctx, cfg, handler)
 	default:
 		return fmt.Errorf("unknown command %q (use serve or migrate)", cmd)
 	}

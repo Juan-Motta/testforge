@@ -1,5 +1,10 @@
 .PHONY: help db-up db-down api web test test-api lint-api build-api migrate
 
+# Development-only defaults. Never use this key outside your machine; set your own
+# SECRET_KEY (openssl rand -base64 32) and leave ALLOW_PRIVATE_NETWORK unset in production.
+export SECRET_KEY ?= ZGV2LW9ubHktdGVzdGZvcmdlLWtleS0zMi1ieXRlcyE=
+export ALLOW_PRIVATE_NETWORK ?= true
+
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 

@@ -19,6 +19,7 @@ tags:
   - name: auth
   - name: workspaces
   - name: api-keys
+  - name: connections
 
 paths:
   /healthz:
@@ -159,6 +160,136 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/v1/connection-kinds:
+    get:
+      tags: [connections]
+      operationId: listConnectionKinds
+      description: Catalog of provider kinds and the form fields each one needs.
+      responses:
+        "200":
+          description: Supported kinds.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ConnectionKind" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/workspaces/{slug}/connections:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [connections]
+      operationId: listConnections
+      description: Any member. Secrets are never returned.
+      responses:
+        "200":
+          description: Connections of the workspace, by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Connection" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [connections]
+      operationId: createConnection
+      description: Owner or admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateConnectionRequest" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Connection" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/workspaces/{slug}/connections/{connectionId}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ConnectionId"
+    get:
+      tags: [connections]
+      operationId: getConnection
+      responses:
+        "200":
+          description: The connection.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Connection" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [connections]
+      operationId: updateConnection
+      description: |
+        Owner or admin. Omitted properties keep their value; an omitted or
+        empty `secret` keeps the stored secret. `config` replaces the whole
+        config. The kind cannot change. Clears `lastTest`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateConnectionRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Connection" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    delete:
+      tags: [connections]
+      operationId: deleteConnection
+      description: Owner or admin.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/connections/{connectionId}/test:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ConnectionId"
+    post:
+      tags: [connections]
+      operationId: testConnection
+      description: |
+        Member or above. Calls the provider with the stored credentials and
+        records the result as `lastTest`. A failed check is still a 200 with
+        `ok: false`.
+      responses:
+        "200":
+          description: Result of the check.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConnectionTest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/v1/workspaces/{slug}/api-keys:
     parameters:
       - $ref: "#/components/parameters/Slug"
@@ -235,6 +366,12 @@ components:
       in: path
       required: true
       schema: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+
+    ConnectionId:
+      name: connectionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
 
   responses:
     Unauthorized:
@@ -366,6 +503,110 @@ components:
           type: [integer, "null"]
           minimum: 1
           maximum: 3650
+
+    Capability:
+      type: string
+      enum: [llm, tts, stt, realtime, traces]
+
+    ConnectionKindId:
+      type: string
+      enum: [openai, anthropic, azure_openai, azure_speech, langfuse]
+
+    ConnectionField:
+      type: object
+      required: [key, label, type, required]
+      properties:
+        key: { type: string, description: Property name inside `config`. }
+        label: { type: string }
+        type: { type: string, enum: [text, url] }
+        required: { type: boolean }
+        default: { type: [string, "null"] }
+        placeholder: { type: [string, "null"] }
+        help: { type: [string, "null"] }
+        pattern:
+          type: [string, "null"]
+          description: Regular expression the value must match (text fields).
+
+    ConnectionKind:
+      type: object
+      required: [kind, label, description, capabilities, fields, secretLabel, docsUrl]
+      properties:
+        kind: { $ref: "#/components/schemas/ConnectionKindId" }
+        label: { type: string }
+        description: { type: string }
+        capabilities:
+          type: array
+          items: { $ref: "#/components/schemas/Capability" }
+        fields:
+          type: array
+          description: Non-secret settings, stored in `config`.
+          items: { $ref: "#/components/schemas/ConnectionField" }
+        secretLabel:
+          type: string
+          description: Label of the single secret, e.g. "API key" or "Secret key".
+        docsUrl: { type: string, description: Where to find the credentials. }
+
+    ConnectionTest:
+      type: object
+      required: [ok, message, latencyMs, testedAt]
+      properties:
+        ok: { type: boolean }
+        message: { type: string, description: Human-readable outcome; never contains secrets. }
+        latencyMs: { type: integer }
+        testedAt: { type: string, format: date-time }
+
+    Connection:
+      type: object
+      required: [id, name, kind, config, secretHint, capabilities, lastTest, createdBy, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/ConnectionKindId" }
+        config:
+          type: object
+          additionalProperties: { type: string }
+        secretHint:
+          type: string
+          description: Last 4 characters of the secret, e.g. `•••• 9f2c`.
+        capabilities:
+          type: array
+          items: { $ref: "#/components/schemas/Capability" }
+        lastTest:
+          oneOf:
+            - $ref: "#/components/schemas/ConnectionTest"
+            - type: "null"
+        createdBy:
+          description: Null when the creator's account was deleted.
+          oneOf:
+            - type: object
+              required: [id, name]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+            - type: "null"
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateConnectionRequest:
+      type: object
+      required: [name, kind, config, secret]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        kind: { $ref: "#/components/schemas/ConnectionKindId" }
+        config:
+          type: object
+          description: Values for the kind's fields; omitted fields take their default.
+          additionalProperties: { type: string }
+        secret: { type: string, minLength: 1, maxLength: 4096 }
+
+    UpdateConnectionRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        config:
+          type: object
+          additionalProperties: { type: string }
+        secret: { type: [string, "null"], maxLength: 4096 }
 
     CreatedApiKey:
       allOf:
