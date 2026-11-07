@@ -431,6 +431,9 @@ func (s *Service) CancelBatch(ctx context.Context, ws workspace.Workspace, id st
 
 // EventsAfter returns up to 200 events of a run after seq, and whether the run has finished.
 func (s *Service) EventsAfter(ctx context.Context, ws workspace.Workspace, id string, after int64) ([]Event, bool, error) {
+	if !uuidPattern.MatchString(id) {
+		return nil, false, errRunMissing
+	}
 	var status string
 	err := s.pool.QueryRow(ctx, `SELECT status FROM runs WHERE workspace_id = $1 AND id = $2`, ws.ID, id).Scan(&status)
 	if errors.Is(err, pgx.ErrNoRows) {

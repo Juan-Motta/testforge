@@ -323,3 +323,18 @@ func TestRunsTenancyAndFilters(t *testing.T) {
 	expectStatus(t, bob.do("POST", foreign+"/cancel", nil), http.StatusNotFound)
 	expectStatus(t, bob.do("POST", "/api/v1/workspaces/"+bobSlug+"/runs", map[string]any{"scenarioIds": []any{f.textScenario["id"]}}), http.StatusUnprocessableEntity)
 }
+
+func TestLaterBatchIsNotStarvedByFullBatch(t *testing.T) {
+	f := newRunFixture(t)
+	f.launch(t, map[string]any{"scenarioIds": []any{f.textScenario["id"]}, "repetitions": 10, "concurrency": 1})
+	f.launch(t, map[string]any{"scenarioIds": []any{f.textScenario["id"]}, "repetitions": 10, "concurrency": 1})
+	f.launch(t, map[string]any{"scenarioIds": []any{f.textScenario["id"]}, "repetitions": 5, "concurrency": 1})
+	late := f.launch(t, map[string]any{"scenarioIds": []any{f.voiceScenario["id"]}})
+	startWorker(t, f.e, &fakeEngine{block: true}, 4)
+	f.waitStatus(t, f.runIDs(t, late["id"].(string))[0], "running")
+}
+
+func TestRunEventsRejectsInvalidID(t *testing.T) {
+	f := newRunFixture(t)
+	expectStatus(t, f.owner.do("GET", f.path("/runs/not-a-uuid/events"), nil), http.StatusNotFound)
+}

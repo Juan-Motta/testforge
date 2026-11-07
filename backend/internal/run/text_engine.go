@@ -57,7 +57,7 @@ func (e *TextEngine) Run(ctx context.Context, job Job, rec Recorder) Outcome {
 		timeout = 120 * time.Second
 	}
 
-	userTurns := 0
+	userTurns, empty := 0, 0
 	for {
 		if userTurns >= sc.EndConditions.MaxTurns {
 			return finish(StatusCompleted, EndMaxTurns, "")
@@ -75,9 +75,18 @@ func (e *TextEngine) Run(ctx context.Context, job Job, rec Recorder) Outcome {
 			if d.HangUp {
 				return finish(StatusCompleted, EndUserHungUp, "")
 			}
+			empty++
+			if empty >= 3 {
+				return finish(StatusFailed, EndError, "Simulator error: it returned nothing to say three times in a row.")
+			}
 			rec.Log("warn", "The simulator returned nothing to say; asking again.")
+			select {
+			case <-time.After(time.Second):
+			case <-ctx.Done():
+			}
 			continue
 		}
+		empty = 0
 		at := elapsed()
 		transcript = append(transcript, Turn{Role: "user", Text: *d.Say, StartMs: at, EndMs: at})
 		rec.Transcript(len(transcript)-1, transcript[len(transcript)-1], true)

@@ -93,6 +93,7 @@ type voiceCall struct {
 	hangUpNext bool
 	decisionID int
 
+	redactor        interface{ Redact(string) string }
 	agentAudioBytes int
 	userTL, agentTL *audio.Timeline
 	errors          int
@@ -154,6 +155,7 @@ func (c *voiceCall) run(ctx context.Context) Outcome {
 		return c.withTrace(c.fail("Could not connect to the agent: "+err.Error()), session)
 	}
 	defer c.conn.Abort()
+	c.redactor = session.Redactor
 	c.caps = c.conn.Codec.Capabilities()
 	c.rate = c.conn.Codec.SampleRate()
 	c.userTL, c.agentTL = audio.NewTimeline(c.rate), audio.NewTimeline(c.rate)
@@ -182,7 +184,10 @@ func (c *voiceCall) run(ctx context.Context) Outcome {
 		status := fmt.Sprintf("Elapsed: %d s of %d s.", int(time.Since(c.start).Seconds()), sc.EndConditions.MaxDurationSeconds)
 		go func() {
 			d, err := c.caller.Decide(connCtx, transcript, status)
-			decisions <- decided{id, d, err}
+			select {
+			case decisions <- decided{id, d, err}:
+			case <-connCtx.Done(): // the call ended; never block forever
+			}
 		}()
 	}
 
@@ -209,7 +214,7 @@ func (c *voiceCall) run(ctx context.Context) Outcome {
 			if c.phase == phaseUserSpeaking && c.hangUpNext {
 				return end(StatusCompleted, EndUserHungUp, "")
 			}
-			c.rec.Log("info", "The agent closed the connection: "+err.Error())
+			c.rec.Log("info", "The agent closed the connection: "+c.redact(err.Error()))
 			return end(StatusCompleted, EndAgentClosed, "")
 		case f, ok := <-c.conn.Frames:
 			if !ok {
@@ -391,6 +396,8 @@ func emit(ctx context.Context, events chan<- micEvent, ev micEvent) bool {
 func (c *voiceCall) onFrame(ctx context.Context, f codec.Frame) bool {
 	now := time.Now()
 	for _, e := range c.conn.Codec.Decode(f) {
+		// Agent text may echo secrets: redact before it is stored, logged or streamed.
+		e.Text = c.redact(e.Text)
 		switch e.Kind {
 		case codec.KindReady:
 			if !c.readySeen {
@@ -469,6 +476,7 @@ func (c *voiceCall) beginAgentTurn(now time.Time) {
 	if !c.speechEnd.IsZero() {
 		latency := int(now.Sub(c.speechEnd).Milliseconds())
 		turn.LatencyMs = &latency
+		c.speechEnd = time.Time{} // only the first agent turn after the user answers them
 	}
 	c.transcript = append(c.transcript, turn)
 	c.agentTurn = len(c.transcript) - 1
@@ -614,6 +622,13 @@ func (c *voiceCall) finish(ctx context.Context, status, reason, msg string) Outc
 		o.Audio["conversation"] = audio.WAV(audio.Mix(c.userTL, c.agentTL), c.rate)
 	}
 	return o
+}
+
+func (c *voiceCall) redact(s string) string {
+	if c.redactor == nil || s == "" {
+		return s
+	}
+	return c.redactor.Redact(s)
 }
 
 func (c *voiceCall) fail(msg string) Outcome {

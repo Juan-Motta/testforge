@@ -18,6 +18,7 @@ import (
 
 	"testforge/internal/agent"
 	"testforge/internal/connection"
+	"testforge/internal/platform/apperr"
 	"testforge/internal/platform/database"
 )
 
@@ -145,8 +146,11 @@ func (w *Worker) claim(ctx context.Context) (*claimedRun, error) {
 	var out *claimedRun
 	err := database.WithTx(ctx, w.pool, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx,
-			`SELECT r.id, r.batch_id FROM runs r WHERE r.status = 'queued' AND NOT r.cancel_requested
-			 ORDER BY r.created_at, r.id FOR UPDATE SKIP LOCKED LIMIT 20`)
+			`SELECT r.id, r.batch_id FROM runs r JOIN run_batches b ON b.id = r.batch_id
+			 WHERE r.status = 'queued' AND NOT r.cancel_requested
+			   -- skip batches already at their concurrency, so a large batch never starves later ones
+			   AND (SELECT count(*) FROM runs x WHERE x.batch_id = r.batch_id AND x.status = 'running') < b.concurrency
+			 ORDER BY r.created_at, r.id FOR UPDATE OF r SKIP LOCKED LIMIT 20`)
 		if err != nil {
 			return err
 		}
@@ -274,14 +278,14 @@ func (w *Worker) prepare(ctx context.Context, c *claimedRun) (Job, error) {
 	job := Job{RunID: c.id, WorkspaceID: c.workspaceID, ThreadID: c.threadID, Snapshot: snap, SimulatorModel: snap.Scenario.Simulator.Model}
 	secrets, err := w.agents.Secrets(ctx, c.workspaceID, snap.Agent.ID)
 	if err != nil {
-		return Job{}, fmt.Errorf("the agent is no longer available: %w", err)
+		return Job{}, unavailable("agent", err)
 	}
 	job.AgentSecrets = secrets
 	if snap.Scenario.Simulator.ConnectionID == nil {
 		return Job{}, errors.New("the scenario has no simulator connection")
 	}
 	if job.Simulator, err = w.connections.Credentials(ctx, c.workspaceID, *snap.Scenario.Simulator.ConnectionID); err != nil {
-		return Job{}, fmt.Errorf("the simulator connection is no longer available: %w", err)
+		return Job{}, unavailable("simulator connection", err)
 	}
 	if snap.Agent.Modality == agent.ModalityVoice {
 		v := snap.Persona.Voice
@@ -290,7 +294,7 @@ func (w *Worker) prepare(ctx context.Context, c *claimedRun) (Job, error) {
 		}
 		creds, err := w.connections.Credentials(ctx, c.workspaceID, v.ConnectionID)
 		if err != nil {
-			return Job{}, fmt.Errorf("the voice connection is no longer available: %w", err)
+			return Job{}, unavailable("voice connection", err)
 		}
 		job.Voice = &VoiceCredentials{Credentials: creds, Voice: v.Voice}
 		if v.Model != nil {
@@ -361,6 +365,14 @@ func (w *Worker) reap(ctx context.Context) {
 		_ = recordEvent(ctx, w.pool, id, "status", statusData(StatusInterrupted, EndWorkerLost, "The worker running this conversation stopped."))
 		_ = recordEvent(ctx, w.pool, id, "end", map[string]string{"status": StatusInterrupted})
 	}
+}
+
+// unavailable explains a missing dependency without leaking internal error codes.
+func unavailable(what string, err error) error {
+	if e, ok := apperr.As(err); ok && e.Kind == apperr.KindNotFound {
+		return fmt.Errorf("the %s was deleted after the run was launched", what)
+	}
+	return fmt.Errorf("the %s is not available: %w", what, err)
 }
 
 func newUUID() string {

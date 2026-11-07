@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"testforge/internal/connection"
@@ -46,7 +48,7 @@ func New(c connection.Credentials, allowPrivate bool) (Client, error) {
 		return &openAI{http: httpClient, url: c.Config["baseUrl"] + "/chat/completions", key: c.Secret, org: c.Config["organization"]}, nil
 	case connection.KindAzureOpenAI:
 		return &openAI{http: httpClient, azure: true, key: c.Secret,
-			url: c.Config["endpoint"] + "/openai/deployments/%s/chat/completions?api-version=" + c.Config["apiVersion"]}, nil
+			url: c.Config["endpoint"] + "/openai/deployments/%s/chat/completions?api-version=" + strings.ReplaceAll(url.QueryEscape(c.Config["apiVersion"]), "%", "%%")}, nil
 	case connection.KindAnthropic:
 		return newAnthropic(c, httpClient), nil
 	}

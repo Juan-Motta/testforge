@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"testforge/internal/run"
 )
@@ -20,6 +21,7 @@ type fakeLLM struct {
 	decisions []string
 	calls     int
 	lastBody  map[string]any
+	delay     time.Duration
 }
 
 func newFakeLLM(t *testing.T, decisions ...string) *fakeLLM {
@@ -31,7 +33,9 @@ func newFakeLLM(t *testing.T, decisions ...string) *fakeLLM {
 		_ = json.Unmarshal(raw, &f.lastBody)
 		d := f.decisions[min(f.calls, len(f.decisions)-1)]
 		f.calls++
+		delay := f.delay
 		f.mu.Unlock()
+		time.Sleep(delay)
 		w.Header().Set("Content-Type", "application/json")
 		if strings.HasSuffix(r.URL.Path, "/v1/messages") {
 			b, _ := json.Marshal(map[string]any{
