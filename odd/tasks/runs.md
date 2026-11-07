@@ -24,7 +24,7 @@ Out of scope: realtime (speech-to-speech) simulator, STT of agent audio, LLM jud
 |---|---|---|---|---|
 | T1 | S1-S9 | inline | done | contract in `backend/api/openapi.yaml` |
 | T2 | S1, S2, S6-S8 | inline | done | 5 integration tests with fake engines (written with the code; RED not observed separately); `-race` clean |
-| T3 | S3, S4 | inline | pending | |
+| T3 | S3, S4 | inline | done | text engine E2E through the worker with fake OpenAI and Anthropic (official SDK) servers and a fake chat agent; max turns and broken simulator cases |
 | T4 | S5, S6 (audio) | inline | pending | |
 | T5 | S9 | delegated (parallel with T2-T4: disjoint surface `apps/web/**`) | pending | |
 | T6 | S1-S9 | inline E2E + independent verifier (Risk item 4: concurrency/leases; item 2: provider credentials) | pending | |

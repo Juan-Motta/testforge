@@ -127,13 +127,20 @@ func (p *Prober) Run(ctx context.Context, a Agent, secrets map[string]string, me
 }
 
 func (p *Prober) preSession(ctx context.Context, run *probeRun, ps *PreSession) error {
-	target, err := buildURL(ps.URL, nil, run.vals)
+	return runPreSession(ctx, egress.NewClient(p.allowPrivate, connectTimeout), ps, run.vals, func(kind, detail string) {
+		run.log(kind, "%s", run.redact.Redact(detail))
+	})
+}
+
+// runPreSession calls the pre-session endpoint and stores its captures in vals.
+func runPreSession(ctx context.Context, client *http.Client, ps *PreSession, vals tmpl.Values, log func(kind, detail string)) error {
+	target, err := buildURL(ps.URL, nil, vals)
 	if err != nil {
 		return err
 	}
 	var body io.Reader
 	if ps.Body != nil && *ps.Body != "" {
-		rendered, err := render(*ps.Body, run.vals, tmpl.JSON)
+		rendered, err := render(*ps.Body, vals, tmpl.JSON)
 		if err != nil {
 			return err
 		}
@@ -145,20 +152,20 @@ func (p *Prober) preSession(ctx context.Context, run *probeRun, ps *PreSession) 
 	if err != nil {
 		return err
 	}
-	if err := setHeaders(req.Header, ps.Headers, run.vals); err != nil {
+	if err := setHeaders(req.Header, ps.Headers, vals); err != nil {
 		return err
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	run.log("send", "Pre-session %s %s", ps.Method, run.displayURL(target))
-	res, err := egress.NewClient(p.allowPrivate, connectTimeout).Do(req)
+	log("send", "Pre-session "+ps.Method+" "+displayURL(target))
+	res, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	run.log("receive", "Pre-session answered HTTP %d", res.StatusCode)
+	log("receive", fmt.Sprintf("Pre-session answered HTTP %d", res.StatusCode))
 	if res.StatusCode >= 300 {
 		return fmt.Errorf("the pre-session call answered HTTP %d", res.StatusCode)
 	}
@@ -172,8 +179,8 @@ func (p *Prober) preSession(ctx context.Context, run *probeRun, ps *PreSession) 
 		if !ok || !isScalar {
 			return fmt.Errorf("the pre-session response has no value at %q", c.Path)
 		}
-		run.vals["session."+c.Name] = s
-		run.log("info", "Captured {{session.%s}} = %s", c.Name, run.clip(s, 80))
+		vals["session."+c.Name] = s
+		log("info", fmt.Sprintf("Captured {{session.%s}} = %s", c.Name, truncate(s, 80)))
 	}
 	return nil
 }
