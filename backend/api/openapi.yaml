@@ -21,6 +21,7 @@ tags:
   - name: api-keys
   - name: connections
   - name: agents
+  - name: scenarios
 
 paths:
   /healthz:
@@ -419,12 +420,13 @@ paths:
     delete:
       tags: [agents]
       operationId: deleteAgent
-      description: Owner or admin.
+      description: Owner or admin. 409 while scenarios use the agent.
       responses:
         "204": { description: Deleted. }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /api/v1/workspaces/{slug}/agents/{agentId}/probe:
     parameters:
@@ -452,6 +454,278 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/workspaces/{slug}/personas:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [scenarios]
+      operationId: listPersonas
+      responses:
+        "200":
+          description: Personas by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Persona" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [scenarios]
+      operationId: createPersona
+      description: Member or above.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Persona" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/workspaces/{slug}/personas/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [scenarios]
+      operationId: getPersona
+      responses:
+        "200":
+          description: The persona.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Persona" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [scenarios]
+      operationId: updatePersona
+      description: Member or above. Replaces the persona.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaInput" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Persona" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    delete:
+      tags: [scenarios]
+      operationId: deletePersona
+      description: Member or above. 409 while scenarios use the persona.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/v1/workspaces/{slug}/scenario-groups:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [scenarios]
+      operationId: listScenarioGroups
+      responses:
+        "200":
+          description: Groups by name, with scenario counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ScenarioGroup" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [scenarios]
+      operationId: createScenarioGroup
+      description: Member or above.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScenarioGroupInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScenarioGroup" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/workspaces/{slug}/scenario-groups/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    put:
+      tags: [scenarios]
+      operationId: updateScenarioGroup
+      description: Member or above.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScenarioGroupInput" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScenarioGroup" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    delete:
+      tags: [scenarios]
+      operationId: deleteScenarioGroup
+      description: Member or above. Its scenarios become ungrouped.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/scenarios:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [scenarios]
+      operationId: listScenarios
+      parameters:
+        - { name: agentId, in: query, schema: { type: string, format: uuid } }
+        - name: groupId
+          in: query
+          description: A group id, or `none` for ungrouped scenarios.
+          schema: { type: string }
+        - { name: tag, in: query, schema: { type: string } }
+        - name: q
+          in: query
+          description: Case-insensitive match on name or goal.
+          schema: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: Matching scenarios by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Scenario" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    post:
+      tags: [scenarios]
+      operationId: createScenario
+      description: Member or above.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScenarioInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Scenario" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/workspaces/{slug}/scenarios/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [scenarios]
+      operationId: getScenario
+      responses:
+        "200":
+          description: The scenario.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Scenario" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [scenarios]
+      operationId: updateScenario
+      description: Member or above. Replaces the scenario; `agentId` cannot change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScenarioInput" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Scenario" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    delete:
+      tags: [scenarios]
+      operationId: deleteScenario
+      description: Member or above.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/scenarios/{id}/duplicate:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    post:
+      tags: [scenarios]
+      operationId: duplicateScenario
+      description: Member or above. Copies the scenario as "<name> (copy)", numbering the suffix when taken.
+      responses:
+        "201":
+          description: The copy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Scenario" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /api/v1/workspaces/{slug}/api-keys:
     parameters:
@@ -538,6 +812,12 @@ components:
 
     AgentId:
       name: agentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+    ResourceId:
+      name: id
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -1000,6 +1280,159 @@ components:
         audioMs: { type: integer, description: Milliseconds of agent audio received. }
         transcript: { type: string, description: Agent transcript captured (voice). }
         reply: { type: string, description: Agent reply (text). }
+
+    Temperament:
+      type: string
+      enum: [polite, hurried, skeptical, confused, angry, friendly, calm, detailed]
+
+    PersonaVoice:
+      type: object
+      required: [connectionId, voice]
+      properties:
+        connectionId: { type: string, format: uuid, description: A connection with `tts` or `realtime` capability. }
+        voice: { type: string, minLength: 1, maxLength: 100, description: "Provider voice name, e.g. `alloy` or `es-MX-DaliaNeural`." }
+
+    PersonaInput:
+      type: object
+      required: [name, locale, temperament, notes, voice]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        locale: { type: string, description: "BCP 47 tag, e.g. `es-MX` or `en`." }
+        temperament: { $ref: "#/components/schemas/Temperament" }
+        notes: { type: string, maxLength: 2000 }
+        voice:
+          oneOf:
+            - $ref: "#/components/schemas/PersonaVoice"
+            - type: "null"
+
+    Persona:
+      allOf:
+        - $ref: "#/components/schemas/PersonaInput"
+        - type: object
+          required: [id, scenarioCount, createdAt, updatedAt]
+          properties:
+            id: { type: string, format: uuid }
+            scenarioCount: { type: integer }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+
+    ScenarioGroupInput:
+      type: object
+      required: [name, description]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 2000 }
+
+    ScenarioGroup:
+      allOf:
+        - $ref: "#/components/schemas/ScenarioGroupInput"
+        - type: object
+          required: [id, scenarioCount, createdAt]
+          properties:
+            id: { type: string, format: uuid }
+            scenarioCount: { type: integer }
+            createdAt: { type: string, format: date-time }
+
+    Fact:
+      type: object
+      required: [key, value]
+      properties:
+        key: { type: string, minLength: 1, maxLength: 80 }
+        value: { type: string, minLength: 1, maxLength: 500 }
+
+    Criterion:
+      type: object
+      required: [id, text, kind, source, weight]
+      properties:
+        id:
+          type: [string, "null"]
+          description: Omit or null for new criteria; the server assigns one. Keep it on edits so results stay comparable.
+        text: { type: string, minLength: 1, maxLength: 500 }
+        kind: { type: string, enum: [must, should] }
+        source:
+          type: string
+          enum: [transcript, trace, timing]
+          description: Evidence the judge uses. `trace` needs the agent's trace connection; `timing` is for voice agents.
+        weight: { type: integer, minimum: 1, maximum: 100 }
+
+    EndConditions:
+      type: object
+      required: [maxDurationSeconds, maxSilenceSeconds, maxTurns, hangUpWhen]
+      properties:
+        maxDurationSeconds: { type: integer, minimum: 30, maximum: 1800, description: Default 360. }
+        maxSilenceSeconds: { type: integer, minimum: 5, maximum: 120, description: Voice only. Default 15. }
+        maxTurns: { type: integer, minimum: 1, maximum: 100, description: Text only. Default 20. }
+        hangUpWhen: { type: string, enum: [goal_or_goodbye, goodbye, never] }
+
+    Interruption:
+      type: object
+      required: [agentTurn, afterMs]
+      properties:
+        agentTurn: { type: integer, minimum: 1, description: Which agent reply to cut off (from 1). }
+        afterMs: { type: integer, minimum: 300, maximum: 60000 }
+
+    ModelChoice:
+      type: object
+      required: [connectionId, model]
+      properties:
+        connectionId: { type: [string, "null"], format: uuid }
+        model: { type: string, maxLength: 100 }
+
+    SimulatorSettings:
+      type: object
+      required: [mode, connectionId, model]
+      properties:
+        mode:
+          type: string
+          enum: [pipeline, realtime, text]
+          description: "`pipeline` (LLM + TTS) or `realtime` (speech-to-speech) for voice agents; `text` for text agents."
+        connectionId: { type: [string, "null"], format: uuid }
+        model: { type: string, maxLength: 100 }
+
+    ScenarioInput:
+      type: object
+      required: [name, agentId, personaId, groupId, tags, context, goal, instructions, facts, criteria, endConditions, interruptions, simulator, judge]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        agentId: { type: string, format: uuid }
+        personaId: { type: string, format: uuid }
+        groupId: { type: [string, "null"], format: uuid }
+        tags:
+          type: array
+          maxItems: 20
+          items: { type: string, minLength: 1, maxLength: 40 }
+        context: { type: string, maxLength: 20000 }
+        goal: { type: string, minLength: 1, maxLength: 5000 }
+        instructions: { type: string, maxLength: 10000 }
+        facts:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/Fact" }
+        criteria:
+          type: array
+          minItems: 1
+          maxItems: 30
+          description: Weights must total exactly 100.
+          items: { $ref: "#/components/schemas/Criterion" }
+        endConditions: { $ref: "#/components/schemas/EndConditions" }
+        interruptions:
+          type: array
+          maxItems: 10
+          description: Voice agents whose codec supports interruptions only.
+          items: { $ref: "#/components/schemas/Interruption" }
+        simulator: { $ref: "#/components/schemas/SimulatorSettings" }
+        judge: { $ref: "#/components/schemas/ModelChoice" }
+
+    Scenario:
+      allOf:
+        - $ref: "#/components/schemas/ScenarioInput"
+        - type: object
+          required: [id, modality, createdAt, updatedAt]
+          properties:
+            id: { type: string, format: uuid }
+            modality: { $ref: "#/components/schemas/Modality" }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
 
     CreatedApiKey:
       allOf:

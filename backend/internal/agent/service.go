@@ -180,6 +180,15 @@ func (s *Service) Delete(ctx context.Context, ws workspace.Workspace, id string)
 		return errNotFound
 	}
 	tag, err := s.pool.Exec(ctx, `DELETE FROM agents WHERE workspace_id = $1 AND id = $2`, ws.ID, id)
+	if database.IsForeignKeyViolation(err) {
+		var n int
+		_ = s.pool.QueryRow(ctx, `SELECT count(*) FROM scenarios WHERE agent_id = $1`, id).Scan(&n)
+		noun := "scenarios"
+		if n == 1 {
+			noun = "scenario"
+		}
+		return apperr.Conflict(fmt.Sprintf("This agent is used by %d %s. Delete them first.", n, noun))
+	}
 	if err != nil {
 		return fmt.Errorf("delete agent: %w", err)
 	}

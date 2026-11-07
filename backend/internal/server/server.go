@@ -20,6 +20,7 @@ import (
 	"testforge/internal/platform/config"
 	"testforge/internal/platform/httpx"
 	"testforge/internal/platform/sealbox"
+	"testforge/internal/scenario"
 	"testforge/internal/workspace"
 )
 
@@ -33,6 +34,7 @@ type server struct {
 	apiKeys    *apikey.Service
 	conns      *connection.Service
 	agents     *agent.Service
+	scenarios  *scenario.Service
 }
 
 // New builds the API handler. It fails when the secret key is invalid.
@@ -48,6 +50,7 @@ func New(pool *pgxpool.Pool, cfg config.Config) (http.Handler, error) {
 		apiKeys:    apikey.NewService(pool),
 		conns:      connection.NewService(pool, box, cfg.AllowPrivateNetwork),
 		agents:     agent.NewService(pool, box, cfg.AllowPrivateNetwork),
+		scenarios:  scenario.NewService(pool),
 	}
 	s.identity = identity.NewService(pool, cfg.SessionTTL, func(ctx context.Context, tx pgx.Tx, u identity.User) error {
 		return workspace.CreatePersonal(ctx, tx, u.ID, u.Name)
@@ -84,6 +87,22 @@ func New(pool *pgxpool.Pool, cfg config.Config) (http.Handler, error) {
 	mux.Handle("PUT /api/v1/workspaces/{slug}/agents/{id}", s.inWorkspace(s.updateAgent))
 	mux.Handle("DELETE /api/v1/workspaces/{slug}/agents/{id}", s.inWorkspace(s.deleteAgent))
 	mux.Handle("POST /api/v1/workspaces/{slug}/agents/{id}/probe", s.inWorkspace(s.probeAgent))
+
+	mux.Handle("GET /api/v1/workspaces/{slug}/personas", s.inWorkspace(s.listPersonas))
+	mux.Handle("POST /api/v1/workspaces/{slug}/personas", s.inWorkspace(s.createPersona))
+	mux.Handle("GET /api/v1/workspaces/{slug}/personas/{id}", s.inWorkspace(s.getPersona))
+	mux.Handle("PUT /api/v1/workspaces/{slug}/personas/{id}", s.inWorkspace(s.updatePersona))
+	mux.Handle("DELETE /api/v1/workspaces/{slug}/personas/{id}", s.inWorkspace(s.deletePersona))
+	mux.Handle("GET /api/v1/workspaces/{slug}/scenario-groups", s.inWorkspace(s.listGroups))
+	mux.Handle("POST /api/v1/workspaces/{slug}/scenario-groups", s.inWorkspace(s.createGroup))
+	mux.Handle("PUT /api/v1/workspaces/{slug}/scenario-groups/{id}", s.inWorkspace(s.updateGroup))
+	mux.Handle("DELETE /api/v1/workspaces/{slug}/scenario-groups/{id}", s.inWorkspace(s.deleteGroup))
+	mux.Handle("GET /api/v1/workspaces/{slug}/scenarios", s.inWorkspace(s.listScenarios))
+	mux.Handle("POST /api/v1/workspaces/{slug}/scenarios", s.inWorkspace(s.createScenario))
+	mux.Handle("GET /api/v1/workspaces/{slug}/scenarios/{id}", s.inWorkspace(s.getScenario))
+	mux.Handle("PUT /api/v1/workspaces/{slug}/scenarios/{id}", s.inWorkspace(s.updateScenario))
+	mux.Handle("DELETE /api/v1/workspaces/{slug}/scenarios/{id}", s.inWorkspace(s.deleteScenario))
+	mux.Handle("POST /api/v1/workspaces/{slug}/scenarios/{id}/duplicate", s.inWorkspace(s.duplicateScenario))
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, apperr.NotFound("Route not found."))
