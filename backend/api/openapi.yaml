@@ -1,0 +1,381 @@
+openapi: 3.1.0
+info:
+  title: TestForge API
+  version: 0.1.0
+  description: |
+    Contract shared by the web app, the CLI and the MCP server.
+
+    Authentication:
+    - Browser: `tf_session` cookie (HttpOnly) issued by sign-up or log-in.
+      Unsafe methods with cookie auth must send an `Origin` header that matches
+      the configured app origin.
+    - Programmatic: `Authorization: Bearer tf_...` workspace API key. A key only
+      reaches the workspace it belongs to and acts with the `member` role there.
+      Creating workspaces and managing API keys require a browser session.
+servers:
+  - url: /
+tags:
+  - name: system
+  - name: auth
+  - name: workspaces
+  - name: api-keys
+
+paths:
+  /healthz:
+    get:
+      tags: [system]
+      operationId: health
+      security: []
+      responses:
+        "200":
+          description: Service and database are reachable.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+
+  /api/v1/auth/signup:
+    post:
+      tags: [auth]
+      operationId: signup
+      security: []
+      description: Creates a user and a personal workspace, then starts a session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SignupRequest" }
+      responses:
+        "201":
+          description: Signed up and logged in.
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Logged in.
+          headers:
+            Set-Cookie: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/Invalid" }
+        "429":
+          description: Too many failed attempts for this email; retry later.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      responses:
+        "204": { description: Session ended and cookie cleared. }
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      operationId: me
+      description: |
+        Current user and the workspaces they can reach. With an API key, the
+        user is the key's creator and only the key's workspace is listed.
+      responses:
+        "200":
+          description: Current identity.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/workspaces:
+    get:
+      tags: [workspaces]
+      operationId: listWorkspaces
+      responses:
+        "200":
+          description: Workspaces the caller is a member of.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Workspace" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [workspaces]
+      operationId: createWorkspace
+      description: Session only. The caller becomes the owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateWorkspaceRequest" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Workspace" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/workspaces/{slug}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [workspaces]
+      operationId: getWorkspace
+      responses:
+        "200":
+          description: Workspace with the caller's role.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Workspace" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/api-keys:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [api-keys]
+      operationId: listApiKeys
+      description: Session only. Any member can list keys; secrets are never returned.
+      responses:
+        "200":
+          description: Keys of the workspace, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ApiKey" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [api-keys]
+      operationId: createApiKey
+      description: Session only, role owner or admin. The secret is returned once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateApiKeyRequest" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedApiKey" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/workspaces/{slug}/api-keys/{keyId}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - name: keyId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [api-keys]
+      operationId: revokeApiKey
+      description: Session only, role owner or admin. Revoking twice is a no-op.
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: tf_session
+    apiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: tf_<secret>
+
+  parameters:
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Authenticated but not allowed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Not found, or not visible to the caller.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: Conflicts with an existing resource.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Invalid:
+      description: Request body failed validation.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [unauthorized, forbidden, not_found, conflict, invalid, rate_limited, internal]
+            message: { type: string }
+            fields:
+              type: object
+              description: Field name to validation message.
+              additionalProperties: { type: string }
+
+    Role:
+      type: string
+      enum: [owner, admin, member, viewer]
+
+    User:
+      type: object
+      required: [id, email, name, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    Workspace:
+      type: object
+      required: [id, name, slug, role, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        createdAt: { type: string, format: date-time }
+
+    Me:
+      type: object
+      required: [user, workspaces, authMethod]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        workspaces:
+          type: array
+          items: { $ref: "#/components/schemas/Workspace" }
+        authMethod:
+          type: string
+          enum: [session, api_key]
+
+    SignupRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 8, maxLength: 256 }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string }
+        password: { type: string }
+
+    CreateWorkspaceRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+
+    ApiKey:
+      type: object
+      required: [id, name, prefix, createdAt, createdBy]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        prefix:
+          type: string
+          description: First characters of the key, for recognition (e.g. `tf_ab12cd34`).
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: [string, "null"], format: date-time }
+        expiresAt: { type: [string, "null"], format: date-time }
+        revokedAt: { type: [string, "null"], format: date-time }
+        createdBy:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+
+    CreateApiKeyRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        expiresInDays:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 3650
+
+    CreatedApiKey:
+      allOf:
+        - $ref: "#/components/schemas/ApiKey"
+        - type: object
+          required: [secret]
+          properties:
+            secret:
+              type: string
+              description: Full key. Shown only in this response.
+
+security:
+  - session: []
+  - apiKey: []

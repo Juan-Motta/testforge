@@ -1,0 +1,20 @@
+# Dependencies and build output
+node_modules/
+.next/
+out/
+dist/
+backend/bin/
+coverage/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Tooling
+.DS_Store
+*.log
+.codegraph/
+.vercel
+*.tsbuildinfo
+next-env.d.ts
