@@ -89,6 +89,7 @@ paths:
     post:
       tags: [auth]
       operationId: logout
+      description: Ends the cookie session. With an API key it is a no-op.
       responses:
         "204": { description: Session ended and cookie cleared. }
 

@@ -80,6 +80,12 @@ func (s *server) startSession(w http.ResponseWriter, r *http.Request, status int
 }
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
+	// A request authenticated by API key skipped the Origin check, so it must
+	// never act on a session cookie that happens to ride along.
+	if p, ok := authn.From(r.Context()); ok && p.Method == authn.MethodAPIKey {
+		httpx.NoContent(w)
+		return
+	}
 	if c, err := r.Cookie(sessionCookie); err == nil {
 		if err := s.identity.Logout(r.Context(), c.Value); err != nil {
 			httpx.Error(w, r, err)

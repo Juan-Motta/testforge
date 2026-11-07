@@ -83,7 +83,7 @@ func (s *Service) Signup(ctx context.Context, in SignupInput, meta ClientMeta) (
 		fields["email"] = "Enter a valid email address."
 	}
 	if n := len([]rune(in.Password)); n < 8 || n > 256 {
-		fields["password"] = "Use at least 8 characters."
+		fields["password"] = "Use 8 to 256 characters."
 	}
 	if err := apperr.Invalid(fields); err != nil {
 		return User{}, "", err

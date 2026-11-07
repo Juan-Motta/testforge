@@ -22,7 +22,7 @@ Out of scope here (later milestones in `docs/architecture.md`): connections, age
 | T1 | S1, S2 | inline | done | `c6094ec`, `5c4c5a9`; `/healthz` smoke OK |
 | T2 | S3, S4, S5 | inline | done | `5c4c5a9`; RED 12/12 failing against stub, GREEN `go test ./...` |
 | T3 | S6 | delegated (parallel with T2: disjoint surface `apps/web/**`) | done | web shell commit; lint/typecheck/build green, 10 Vitest tests; E2E against real API (signup, key create/use/revoke, logout, wrong + right login, workspace create) |
-| T4 | S1-S6 | independent verifier (Risk item 2: auth) | pending | |
+| T4 | S1-S6 | independent verifier (Risk item 2: auth) | done | S1-S6 pass, 0 blockers; advisories 1-3 fixed with regression tests (RED then GREEN) |
 
 ## Log
 
@@ -31,3 +31,4 @@ Out of scope here (later milestones in `docs/architecture.md`): connections, age
 - **L3** (2026-11-07): Go 1.27.3 installed with Homebrew at the user's request. Legacy reference: `test-forge-main` (FastAPI). RDD is off globally.
 - **L4** (2026-11-07): Design canvas for iteration: https://claude.ai/artifact/VGyvMoq5VabjDwA1c91qXN (Login, Overview, Agent transport+codec, Run report, API keys). User chose "Seguir integración".
 - **L5** (2026-11-07): Integration bug found E2E: the global 401 handler redirected wrong-credential log-ins to /login, hiding the error. Fixed with `meta.handlesUnauthorized` on log-in/sign-up mutations (`src/lib/api/unauthorized.ts`, RED then GREEN).
+- **L6** (2026-11-07): Independent verifier: S1-S6 pass, no blockers. Fixed advisories: logout under an API key no longer ends a riding cookie session; `Bearer` scheme is case-insensitive; accurate message for passwords over 256 chars. Open follow-ups: per-email lockout can be abused to block a user, non-atomic throttle count, "log out everywhere", trusted proxy IPs, whether members/viewers may list key metadata.

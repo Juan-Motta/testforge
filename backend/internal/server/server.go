@@ -71,8 +71,9 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		if header := r.Header.Get("Authorization"); header != "" {
-			secret, ok := strings.CutPrefix(header, "Bearer ")
-			if !ok {
+			// The auth scheme name is case-insensitive (RFC 9110 §11.1).
+			scheme, secret, ok := strings.Cut(header, " ")
+			if !ok || !strings.EqualFold(scheme, "Bearer") {
 				httpx.Error(w, r, apperr.Unauthorized("Use an Authorization: Bearer <api key> header."))
 				return
 			}

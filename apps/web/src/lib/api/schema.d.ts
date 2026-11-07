@@ -62,6 +62,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Ends the cookie session. With an API key it is a no-op. */
         post: operations["logout"];
         delete?: never;
         options?: never;

@@ -414,3 +414,47 @@ func TestApiKeyManagementRequiresAdmin(t *testing.T) {
 		expectStatus(t, c.do("DELETE", "/api/v1/workspaces/"+slug+"/api-keys/"+key["id"].(string), nil), http.StatusForbidden)
 	}
 }
+
+func TestBearerSchemeIsCaseInsensitive(t *testing.T) {
+	e := newEnv(t)
+	ana := e.browser()
+	slug := firstWorkspace(t, signup(t, ana, "Ana", "ana@example.com"))["slug"].(string)
+	secret := createKey(t, ana, slug)["secret"].(string)
+
+	req, _ := http.NewRequest("GET", e.srv.URL+"/api/v1/auth/me", nil)
+	req.Header.Set("Authorization", "bearer "+secret)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("lowercase bearer status = %d, want 200", res.StatusCode)
+	}
+}
+
+func TestLogoutWithApiKeyDoesNotEndCookieSession(t *testing.T) {
+	e := newEnv(t)
+	ana := e.browser()
+	slug := firstWorkspace(t, signup(t, ana, "Ana", "ana@example.com"))["slug"].(string)
+	secret := createKey(t, ana, slug)["secret"].(string)
+	bob := e.browser()
+	signup(t, bob, "Bob", "bob@example.com")
+
+	// Bob's cookie rides along with Ana's bearer key and no Origin.
+	bob.bearer, bob.origin = secret, ""
+	expectStatus(t, bob.do("POST", "/api/v1/auth/logout", nil), http.StatusNoContent)
+
+	bob.bearer, bob.origin = "", appOrigin
+	expectStatus(t, bob.do("GET", "/api/v1/auth/me", nil), http.StatusOK)
+}
+
+func TestSignupRejectsOverlongPasswordWithAccurateMessage(t *testing.T) {
+	e := newEnv(t)
+	r := e.browser().do("POST", "/api/v1/auth/signup", map[string]any{"name": "Ana", "email": "ana@example.com", "password": strings.Repeat("x", 300)})
+	expectStatus(t, r, http.StatusUnprocessableEntity)
+	msg := r.body["error"].(map[string]any)["fields"].(map[string]any)["password"]
+	if msg != "Use 8 to 256 characters." {
+		t.Fatalf("password message = %v", msg)
+	}
+}
