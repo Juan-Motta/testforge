@@ -214,6 +214,113 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent-codecs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Catalog of codecs and the options each one takes. */
+        get: operations["listAgentCodecs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Ready-made agent drafts. Applying one only fills an editable form. */
+        get: operations["listAgentPresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        /** @description Any member. Secret values are never returned. */
+        get: operations["listAgents"];
+        put?: never;
+        /** @description Owner or admin. */
+        post: operations["createAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/agents/{agentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getAgent"];
+        /**
+         * @description Owner or admin. Replaces the whole definition (same body as create).
+         *     `modality` cannot change. Secrets: the list replaces the stored names;
+         *     an entry with an empty `value` keeps the stored value of that name,
+         *     unless the update would send that secret to a host it was not sent to
+         *     before (a new agent or pre-session host, or a reference moved to the
+         *     pre-session): then it must carry a value again (422 on `secrets`), so
+         *     stored secrets only reach the hosts they were entered for.
+         */
+        put: operations["updateAgent"];
+        post?: never;
+        /** @description Owner or admin. */
+        delete: operations["deleteAgent"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/agents/{agentId}/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Member or above. Connects to the agent with its stored configuration
+         *     and a fresh thread id, listens (voice) or sends one message (text),
+         *     then closes. A failed probe is still a 200 with `ok: false`.
+         */
+        post: operations["probeAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{slug}/api-keys": {
         parameters: {
             query?: never;
@@ -408,6 +515,159 @@ export interface components {
             };
             secret?: string | null;
         };
+        /** @enum {string} */
+        Modality: "voice" | "text";
+        /** @enum {string} */
+        CodecType: "vivi_live" | "openai_realtime" | "json_audio" | "http_json" | "http_stream";
+        KeyValue: {
+            key: string;
+            /** @description Template; may reference `{{run.thread_id}}`, `{{var.*}}`, `{{secret.*}}`, `{{session.*}}`. */
+            value: string;
+        };
+        /** @description Optional HTTP call made before connecting; its JSON response fields become `{{session.<name>}}`. */
+        PreSession: {
+            /** @enum {string} */
+            method: "GET" | "POST";
+            url: string;
+            headers: components["schemas"]["KeyValue"][];
+            /** @description JSON template (POST only). */
+            body: string | null;
+            captures: {
+                name: string;
+                /** @description Dot path into the JSON response */
+                path: string;
+            }[];
+        };
+        Transport: {
+            /**
+             * @description `wss://` or `https://` (`ws`/`http` only with private networking).
+             *     Scheme and host are literal; the path may contain templates. No query
+             *     string here: use `query`.
+             */
+            url: string;
+            query: components["schemas"]["KeyValue"][];
+            headers: components["schemas"]["KeyValue"][];
+            /** @description HTTP agents only. JSON template that must reference `{{message}}`. */
+            body: string | null;
+            /** @description WebSocket agents only. JSON templates sent right after connecting. */
+            initMessages: string[];
+            preSession: components["schemas"]["PreSession"] | null;
+        };
+        Codec: {
+            type: components["schemas"]["CodecType"];
+            /** @description Values for the codec's option fields; omitted options take their default. */
+            options: {
+                [key: string]: string;
+            };
+        };
+        AgentCodecSpec: {
+            codec: components["schemas"]["CodecType"];
+            label: string;
+            description: string;
+            modality: components["schemas"]["Modality"];
+            fields: components["schemas"]["CodecField"][];
+        };
+        CodecField: {
+            key: string;
+            label: string;
+            /** @enum {string} */
+            type: "text" | "number" | "boolean" | "json";
+            required: boolean;
+            default?: string | null;
+            placeholder?: string | null;
+            help?: string | null;
+        };
+        AgentInput: {
+            name: string;
+            description: string;
+            modality: components["schemas"]["Modality"];
+            transport: components["schemas"]["Transport"];
+            codec: components["schemas"]["Codec"];
+            /** @description Non-secret values referenced as `{{var.<key>}}`. */
+            variables: components["schemas"]["KeyValue"][];
+            /** @description Referenced as `{{secret.<name>}}`. An empty `value` keeps the stored one (update only). */
+            secrets: {
+                name: string;
+                value: string;
+            }[];
+            /**
+             * Format: uuid
+             * @description A `traces` connection of the same workspace.
+             */
+            traceConnectionId: string | null;
+            /** @description Template of the id the agent uses as its trace session id. Default `{{run.thread_id}}`. */
+            traceSessionId: string;
+        };
+        Agent: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+            modality: components["schemas"]["Modality"];
+            transport: components["schemas"]["Transport"];
+            codec: components["schemas"]["Codec"];
+            variables: components["schemas"]["KeyValue"][];
+            secrets: {
+                name: string;
+                /** @description e.g. `•••• 9f2c` */
+                hint: string;
+            }[];
+            /** Format: uuid */
+            traceConnectionId: string | null;
+            traceSessionId: string;
+            createdBy: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            } | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AgentPreset: {
+            id: string;
+            label: string;
+            description: string;
+            modality: components["schemas"]["Modality"];
+            /** @description Values to fill the editor with; variable values may be empty placeholders. */
+            draft: {
+                transport: components["schemas"]["Transport"];
+                codec: components["schemas"]["Codec"];
+                variables: components["schemas"]["KeyValue"][];
+                traceSessionId: string;
+            };
+            secretNames: string[];
+        };
+        ProbeRequest: {
+            /** @description Text agents only. Default "Hello". */
+            message?: string;
+            /** @description How long to listen (voice) or wait for the reply (text). Default 8 for voice, 30 for text. */
+            durationSeconds?: number;
+        };
+        ProbeEvent: {
+            /** @description Milliseconds since the probe started. */
+            atMs: number;
+            /** @enum {string} */
+            kind: "connect" | "send" | "receive" | "ready" | "audio" | "transcript" | "reply" | "error" | "close" | "info";
+            /** @description Never contains secret values. */
+            detail: string;
+        };
+        ProbeResult: {
+            ok: boolean;
+            summary: string;
+            /** Format: uuid */
+            threadId: string;
+            /** @description Resolved trace session id for this probe. */
+            traceSessionId: string;
+            events: components["schemas"]["ProbeEvent"][];
+            /** @description Milliseconds of agent audio received. */
+            audioMs: number;
+            /** @description Agent transcript captured (voice). */
+            transcript: string;
+            /** @description Agent reply (text). */
+            reply: string;
+        };
         CreatedApiKey: components["schemas"]["ApiKey"] & {
             /** @description Full key. Shown only in this response. */
             secret: string;
@@ -463,6 +723,7 @@ export interface components {
     parameters: {
         Slug: string;
         ConnectionId: string;
+        AgentId: string;
     };
     requestBodies: never;
     headers: never;
@@ -854,6 +1115,221 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listAgentCodecs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supported codecs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AgentCodecSpec"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listAgentPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Presets. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AgentPreset"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listAgents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agents of the workspace, by name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Agent"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentInput"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    getAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentInput"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    deleteAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    probeAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Probe outcome. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
         };
     };
     listApiKeys: {

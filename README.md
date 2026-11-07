@@ -39,7 +39,7 @@ The API reads environment variables; defaults suit local development.
 | `ALLOW_PRIVATE_NETWORK` | `false` (`make api` sets `true`) | Let provider URLs use `http` and private addresses, e.g. a local Langfuse. Keep `false` in production |
 | `TEST_DATABASE_URL` | `postgres://testforge:testforge@localhost:5433/postgres?sslmode=disable` | Server where tests create throwaway databases |
 
-The web app reads `API_URL` (default `http://localhost:8080`).
+The web app reads `API_URL` (default `http://localhost:8080`). `next dev` reads it at startup; for `next build`/`next start` the rewrite destination is fixed at **build** time, so set `API_URL` when building.
 
 ## Tests
 
