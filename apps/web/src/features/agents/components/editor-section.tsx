@@ -25,7 +25,7 @@ export function EditorSection({ title, description, actions, disabled, className
         {actions ? <div className="flex shrink-0 gap-2">{actions}</div> : null}
       </CardHeader>
       <CardContent>
-        <fieldset disabled={disabled} className="flex min-w-0 flex-col gap-5">
+        <fieldset disabled={disabled} className="@container flex min-w-0 flex-col gap-5">
           {children}
         </fieldset>
       </CardContent>

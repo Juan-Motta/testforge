@@ -3,7 +3,7 @@
 import { ArrowLeftIcon, AudioLinesIcon, MessageSquareTextIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Controller, FormProvider, useForm, useWatch, type Path } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -43,6 +43,7 @@ import { SecretsSection } from "./secrets-section";
 import { TemplateVariables } from "./template-variables";
 import { TracesSection } from "./traces-section";
 import { TransportSection } from "./transport-section";
+import { useBeforeUnload } from "./use-before-unload";
 
 const MODALITY_ICONS = { voice: AudioLinesIcon, text: MessageSquareTextIcon } as const;
 
@@ -71,16 +72,6 @@ function ModalityPicker({ value, onChange }: { value: Modality; onChange: (modal
       })}
     </div>
   );
-}
-
-/** Warns before closing or reloading the tab with unsaved changes. */
-function useBeforeUnload(active: boolean) {
-  useEffect(() => {
-    if (!active) return;
-    const handler = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [active]);
 }
 
 type AgentEditorProps = {

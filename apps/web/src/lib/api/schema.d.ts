@@ -290,7 +290,7 @@ export interface paths {
          */
         put: operations["updateAgent"];
         post?: never;
-        /** @description Owner or admin. */
+        /** @description Owner or admin. 409 while scenarios use the agent. */
         delete: operations["deleteAgent"];
         options?: never;
         head?: never;
@@ -315,6 +315,146 @@ export interface paths {
          *     then closes. A failed probe is still a 200 with `ok: false`.
          */
         post: operations["probeAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/personas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        get: operations["listPersonas"];
+        put?: never;
+        /** @description Member or above. */
+        post: operations["createPersona"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/personas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getPersona"];
+        /** @description Member or above. Replaces the persona. */
+        put: operations["updatePersona"];
+        post?: never;
+        /** @description Member or above. 409 while scenarios use the persona. */
+        delete: operations["deletePersona"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/scenario-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        get: operations["listScenarioGroups"];
+        put?: never;
+        /** @description Member or above. */
+        post: operations["createScenarioGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/scenario-groups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Member or above. */
+        put: operations["updateScenarioGroup"];
+        post?: never;
+        /** @description Member or above. Its scenarios become ungrouped. */
+        delete: operations["deleteScenarioGroup"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        get: operations["listScenarios"];
+        put?: never;
+        /** @description Member or above. */
+        post: operations["createScenario"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/scenarios/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getScenario"];
+        /** @description Member or above. Replaces the scenario; `agentId` cannot change. */
+        put: operations["updateScenario"];
+        post?: never;
+        /** @description Member or above. */
+        delete: operations["deleteScenario"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/scenarios/{id}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Member or above. Copies the scenario as "<name> (copy)", numbering the suffix when taken. */
+        post: operations["duplicateScenario"];
         delete?: never;
         options?: never;
         head?: never;
@@ -668,6 +808,122 @@ export interface components {
             /** @description Agent reply (text). */
             reply: string;
         };
+        /** @enum {string} */
+        Temperament: "polite" | "hurried" | "skeptical" | "confused" | "angry" | "friendly" | "calm" | "detailed";
+        PersonaVoice: {
+            /**
+             * Format: uuid
+             * @description A connection with `tts` or `realtime` capability.
+             */
+            connectionId: string;
+            /** @description Provider voice name, e.g. `alloy` or `es-MX-DaliaNeural`. */
+            voice: string;
+        };
+        PersonaInput: {
+            name: string;
+            /** @description BCP 47 tag, e.g. `es-MX` or `en`. */
+            locale: string;
+            temperament: components["schemas"]["Temperament"];
+            notes: string;
+            voice: components["schemas"]["PersonaVoice"] | null;
+        };
+        Persona: components["schemas"]["PersonaInput"] & {
+            /** Format: uuid */
+            id: string;
+            scenarioCount: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ScenarioGroupInput: {
+            name: string;
+            description: string;
+        };
+        ScenarioGroup: components["schemas"]["ScenarioGroupInput"] & {
+            /** Format: uuid */
+            id: string;
+            scenarioCount: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        Fact: {
+            key: string;
+            value: string;
+        };
+        Criterion: {
+            /** @description Omit or null for new criteria; the server assigns one. Keep it on edits so results stay comparable. */
+            id: string | null;
+            text: string;
+            /** @enum {string} */
+            kind: "must" | "should";
+            /**
+             * @description Evidence the judge uses. `trace` needs the agent's trace connection; `timing` is for voice agents.
+             * @enum {string}
+             */
+            source: "transcript" | "trace" | "timing";
+            weight: number;
+        };
+        EndConditions: {
+            /** @description Default 360. */
+            maxDurationSeconds: number;
+            /** @description Voice only. Default 15. */
+            maxSilenceSeconds: number;
+            /** @description Text only. Default 20. */
+            maxTurns: number;
+            /** @enum {string} */
+            hangUpWhen: "goal_or_goodbye" | "goodbye" | "never";
+        };
+        Interruption: {
+            /** @description Which agent reply to cut off (from 1). */
+            agentTurn: number;
+            afterMs: number;
+        };
+        ModelChoice: {
+            /** Format: uuid */
+            connectionId: string | null;
+            model: string;
+        };
+        SimulatorSettings: {
+            /**
+             * @description `pipeline` (LLM + TTS) or `realtime` (speech-to-speech) for voice agents; `text` for text agents.
+             * @enum {string}
+             */
+            mode: "pipeline" | "realtime" | "text";
+            /** Format: uuid */
+            connectionId: string | null;
+            model: string;
+        };
+        ScenarioInput: {
+            name: string;
+            /** Format: uuid */
+            agentId: string;
+            /** Format: uuid */
+            personaId: string;
+            /** Format: uuid */
+            groupId: string | null;
+            tags: string[];
+            context: string;
+            goal: string;
+            instructions: string;
+            facts: components["schemas"]["Fact"][];
+            /** @description Weights must total exactly 100. */
+            criteria: components["schemas"]["Criterion"][];
+            endConditions: components["schemas"]["EndConditions"];
+            /** @description Voice agents whose codec supports interruptions only. */
+            interruptions: components["schemas"]["Interruption"][];
+            simulator: components["schemas"]["SimulatorSettings"];
+            judge: components["schemas"]["ModelChoice"];
+        };
+        Scenario: components["schemas"]["ScenarioInput"] & {
+            /** Format: uuid */
+            id: string;
+            modality: components["schemas"]["Modality"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
         CreatedApiKey: components["schemas"]["ApiKey"] & {
             /** @description Full key. Shown only in this response. */
             secret: string;
@@ -724,6 +980,7 @@ export interface components {
         Slug: string;
         ConnectionId: string;
         AgentId: string;
+        ResourceId: string;
     };
     requestBodies: never;
     headers: never;
@@ -1299,6 +1556,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     probeAgent: {
@@ -1330,6 +1588,430 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["Invalid"];
+        };
+    };
+    listPersonas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Personas by name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Persona"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createPersona: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonaInput"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Persona"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    getPersona: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The persona. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Persona"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updatePersona: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonaInput"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Persona"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    deletePersona: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listScenarioGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Groups by name, with scenario counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ScenarioGroup"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createScenarioGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScenarioGroupInput"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioGroup"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    updateScenarioGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScenarioGroupInput"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioGroup"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    deleteScenarioGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listScenarios: {
+        parameters: {
+            query?: {
+                agentId?: string;
+                /** @description A group id, or `none` for ungrouped scenarios. */
+                groupId?: string;
+                tag?: string;
+                /** @description Case-insensitive match on name or goal. */
+                q?: string;
+            };
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching scenarios by name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Scenario"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    createScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScenarioInput"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    getScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The scenario. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScenarioInput"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    deleteScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    duplicateScenario: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The copy. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Scenario"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listApiKeys: {

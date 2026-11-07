@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
-import { SectionPlaceholder } from "@/features/shell/components/section-placeholder";
+import { PersonasPage } from "@/features/personas/components/personas-page";
 
 export const metadata: Metadata = { title: "Personas" };
 
-export default function PersonasPage() {
-  return <SectionPlaceholder id="personas" />;
+export default function PersonasRoute() {
+  return <PersonasPage />;
 }

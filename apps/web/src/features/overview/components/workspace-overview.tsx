@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { useAgents } from "@/features/agents/api/agents";
 import { useConnections } from "@/features/connections/api/connections";
+import { useScenarios } from "@/features/scenarios/api/scenarios";
 import { SECTIONS, sectionHref, type Section } from "@/features/shell/lib/navigation";
 import { useCurrentWorkspace, useSession } from "@/features/workspaces/session-context";
 
@@ -76,9 +77,11 @@ export function WorkspaceOverview() {
   const firstName = user.name.split(" ")[0];
   const connections = useConnections(workspace.slug);
   const agents = useAgents(workspace.slug);
+  const scenarios = useScenarios(workspace.slug);
   const done: Partial<Record<Section["id"], boolean>> = {
     connections: (connections.data?.length ?? 0) > 0,
     agents: (agents.data?.length ?? 0) > 0,
+    scenarios: (scenarios.data?.length ?? 0) > 0,
   };
   const completed = STEPS.filter((step) => done[step.section.id]).length;
 

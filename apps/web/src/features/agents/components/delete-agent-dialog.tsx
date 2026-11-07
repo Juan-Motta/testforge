@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { toast } from "sonner";
+
+import { FormError } from "@/components/form-error";
 
 import {
   AlertDialog,
@@ -28,29 +31,38 @@ type DeleteAgentDialogProps = {
 
 export function DeleteAgentDialog({ slug, agent, open, onOpenChange, onDeleted }: DeleteAgentDialogProps) {
   const remove = useDeleteAgent(slug);
+  // Shown inside the dialog: a 409 explains how many scenarios still use the agent.
+  const [error, setError] = useState<string | null>(null);
+
+  function changeOpen(next: boolean) {
+    if (!next) setError(null);
+    onOpenChange(next);
+  }
 
   function confirm(event: React.MouseEvent) {
     event.preventDefault();
+    setError(null);
     remove.mutate(agent.id, {
       onSuccess: () => {
         toast.success(`Agent “${agent.name}” deleted`);
-        onOpenChange(false);
+        changeOpen(false);
         onDeleted();
       },
-      onError: (error) => toast.error(errorMessage(error)),
+      onError: (cause) => setError(errorMessage(cause)),
     });
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={changeOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete “{agent.name}”?</AlertDialogTitle>
           <AlertDialogDescription>
-            Its configuration and stored secrets are erased. Scenarios and runs that target this agent will
-            need another one. This cannot be undone.
+            Its configuration and stored secrets are erased. Delete the scenarios that test this agent first.
+            This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <FormError message={error ?? undefined} />
         <AlertDialogFooter>
           <AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={confirm} disabled={remove.isPending}>
