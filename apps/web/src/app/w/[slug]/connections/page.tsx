@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
-import { SectionPlaceholder } from "@/features/shell/components/section-placeholder";
+import { ConnectionsPage } from "@/features/connections/components/connections-page";
 
 export const metadata: Metadata = { title: "Connections" };
 
-export default function ConnectionsPage() {
-  return <SectionPlaceholder id="connections" />;
+export default function ConnectionsRoute() {
+  return <ConnectionsPage />;
 }

@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrowRightIcon, CircleIcon, KeyRoundIcon, type LucideIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  CircleCheckIcon,
+  CircleIcon,
+  KeyRoundIcon,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 
 import { PageContainer } from "@/components/page-container";
@@ -13,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useConnections } from "@/features/connections/api/connections";
 import { SECTIONS, sectionHref, type Section } from "@/features/shell/lib/navigation";
 import { useCurrentWorkspace, useSession } from "@/features/workspaces/session-context";
 
@@ -66,7 +73,11 @@ export function WorkspaceOverview() {
   const { user } = useSession();
   const workspace = useCurrentWorkspace();
   const firstName = user.name.split(" ")[0];
-  const completed = 0;
+  const connections = useConnections(workspace.slug);
+  const done: Partial<Record<Section["id"], boolean>> = {
+    connections: (connections.data?.length ?? 0) > 0,
+  };
+  const completed = STEPS.filter((step) => done[step.section.id]).length;
 
   return (
     <PageContainer>
@@ -104,31 +115,40 @@ export function WorkspaceOverview() {
         </CardHeader>
         <CardContent className="px-0">
           <ol className="divide-y">
-            {STEPS.map((step, index) => (
-              <li
-                key={step.section.id}
-                className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center"
-              >
-                <div className="flex flex-1 items-start gap-4">
-                  <StepIcon icon={step.section.icon} />
-                  <div className="flex flex-col gap-1">
-                    <p className="flex items-center gap-2 text-sm font-medium">
-                      <CircleIcon className="size-3.5 text-muted-foreground" aria-hidden />
-                      <span className="sr-only">Not done:</span>
-                      <span className="text-muted-foreground tabular-nums">{index + 1}.</span>
-                      {step.title}
-                    </p>
-                    <p className="text-sm text-muted-foreground">{step.description}</p>
+            {STEPS.map((step, index) => {
+              const isDone = done[step.section.id] ?? false;
+              return (
+                <li
+                  key={step.section.id}
+                  className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center"
+                >
+                  <div className="flex flex-1 items-start gap-4">
+                    <StepIcon icon={step.section.icon} />
+                    <div className="flex flex-col gap-1">
+                      <p className="flex items-center gap-2 text-sm font-medium">
+                        {isDone ? (
+                          <CircleCheckIcon className="size-3.5 text-success" aria-hidden />
+                        ) : (
+                          <CircleIcon className="size-3.5 text-muted-foreground" aria-hidden />
+                        )}
+                        <span className="sr-only">{isDone ? "Done:" : "Not done:"}</span>
+                        <span className="text-muted-foreground tabular-nums">{index + 1}.</span>
+                        <span className={isDone ? "text-muted-foreground line-through" : undefined}>
+                          {step.title}
+                        </span>
+                      </p>
+                      <p className="text-sm text-muted-foreground">{step.description}</p>
+                    </div>
                   </div>
-                </div>
-                <Button variant="outline" size="sm" asChild className="self-start sm:self-center">
-                  <Link href={sectionHref(workspace.slug, step.section)}>
-                    {step.cta}
-                    <ArrowRightIcon data-icon="inline-end" />
-                  </Link>
-                </Button>
-              </li>
-            ))}
+                  <Button variant="outline" size="sm" asChild className="self-start sm:self-center">
+                    <Link href={sectionHref(workspace.slug, step.section)}>
+                      {step.cta}
+                      <ArrowRightIcon data-icon="inline-end" />
+                    </Link>
+                  </Button>
+                </li>
+              );
+            })}
           </ol>
         </CardContent>
       </Card>

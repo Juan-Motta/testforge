@@ -125,6 +125,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/connection-kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Catalog of provider kinds and the form fields each one needs. */
+        get: operations["listConnectionKinds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        /** @description Any member. Secrets are never returned. */
+        get: operations["listConnections"];
+        put?: never;
+        /** @description Owner or admin. */
+        post: operations["createConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/connections/{connectionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                connectionId: components["parameters"]["ConnectionId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getConnection"];
+        put?: never;
+        post?: never;
+        /** @description Owner or admin. */
+        delete: operations["deleteConnection"];
+        options?: never;
+        head?: never;
+        /**
+         * @description Owner or admin. Omitted properties keep their value; an omitted or
+         *     empty `secret` keeps the stored secret. `config` replaces the whole
+         *     config. The kind cannot change. Clears `lastTest`.
+         */
+        patch: operations["updateConnection"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/connections/{connectionId}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                connectionId: components["parameters"]["ConnectionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Member or above. Calls the provider with the stored credentials and
+         *     records the result as `lastTest`. A failed check is still a 200 with
+         *     `ok: false`.
+         */
+        post: operations["testConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{slug}/api-keys": {
         parameters: {
             query?: never;
@@ -243,6 +329,82 @@ export interface components {
             name: string;
             expiresInDays?: number | null;
         };
+        /** @enum {string} */
+        Capability: "llm" | "tts" | "stt" | "realtime" | "traces";
+        /** @enum {string} */
+        ConnectionKindId: "openai" | "anthropic" | "azure_openai" | "azure_speech" | "langfuse";
+        ConnectionField: {
+            /** @description Property name inside `config`. */
+            key: string;
+            label: string;
+            /** @enum {string} */
+            type: "text" | "url";
+            required: boolean;
+            default?: string | null;
+            placeholder?: string | null;
+            help?: string | null;
+            /** @description Regular expression the value must match (text fields). */
+            pattern?: string | null;
+        };
+        ConnectionKind: {
+            kind: components["schemas"]["ConnectionKindId"];
+            label: string;
+            description: string;
+            capabilities: components["schemas"]["Capability"][];
+            /** @description Non-secret settings, stored in `config`. */
+            fields: components["schemas"]["ConnectionField"][];
+            /** @description Label of the single secret, e.g. "API key" or "Secret key". */
+            secretLabel: string;
+            /** @description Where to find the credentials. */
+            docsUrl: string;
+        };
+        ConnectionTest: {
+            ok: boolean;
+            /** @description Human-readable outcome; never contains secrets. */
+            message: string;
+            latencyMs: number;
+            /** Format: date-time */
+            testedAt: string;
+        };
+        Connection: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            kind: components["schemas"]["ConnectionKindId"];
+            config: {
+                [key: string]: string;
+            };
+            /** @description Last 4 characters of the secret, e.g. `•••• 9f2c`. */
+            secretHint: string;
+            capabilities: components["schemas"]["Capability"][];
+            lastTest: components["schemas"]["ConnectionTest"] | null;
+            /** @description Null when the creator's account was deleted. */
+            createdBy: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            } | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreateConnectionRequest: {
+            name: string;
+            kind: components["schemas"]["ConnectionKindId"];
+            /** @description Values for the kind's fields; omitted fields take their default. */
+            config: {
+                [key: string]: string;
+            };
+            secret: string;
+        };
+        UpdateConnectionRequest: {
+            name?: string;
+            config?: {
+                [key: string]: string;
+            };
+            secret?: string | null;
+        };
         CreatedApiKey: components["schemas"]["ApiKey"] & {
             /** @description Full key. Shown only in this response. */
             secret: string;
@@ -297,6 +459,7 @@ export interface components {
     };
     parameters: {
         Slug: string;
+        ConnectionId: string;
     };
     requestBodies: never;
     headers: never;
@@ -500,6 +663,193 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listConnectionKinds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Supported kinds. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ConnectionKind"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Connections of the workspace, by name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Connection"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    getConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                connectionId: components["parameters"]["ConnectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The connection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                connectionId: components["parameters"]["ConnectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                connectionId: components["parameters"]["ConnectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Connection"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    testConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                connectionId: components["parameters"]["ConnectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Result of the check. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionTest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
