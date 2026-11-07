@@ -20,6 +20,7 @@ tags:
   - name: workspaces
   - name: api-keys
   - name: connections
+  - name: agents
 
 paths:
   /healthz:
@@ -293,6 +294,164 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/v1/agent-codecs:
+    get:
+      tags: [agents]
+      operationId: listAgentCodecs
+      description: Catalog of codecs and the options each one takes.
+      responses:
+        "200":
+          description: Supported codecs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AgentCodecSpec" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/agent-presets:
+    get:
+      tags: [agents]
+      operationId: listAgentPresets
+      description: Ready-made agent drafts. Applying one only fills an editable form.
+      responses:
+        "200":
+          description: Presets.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AgentPreset" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/workspaces/{slug}/agents:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [agents]
+      operationId: listAgents
+      description: Any member. Secret values are never returned.
+      responses:
+        "200":
+          description: Agents of the workspace, by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Agent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [agents]
+      operationId: createAgent
+      description: Owner or admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/workspaces/{slug}/agents/{agentId}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      tags: [agents]
+      operationId: getAgent
+      responses:
+        "200":
+          description: The agent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [agents]
+      operationId: updateAgent
+      description: |
+        Owner or admin. Replaces the whole definition (same body as create).
+        `modality` cannot change. Secrets: the list replaces the stored names;
+        an entry with an empty `value` keeps the stored value of that name.
+        When `transport.url` or `transport.preSession.url` changes, every
+        secret must carry a value again (422 on `secrets`), so stored secrets
+        only reach the hosts they were entered for.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AgentInput" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    delete:
+      tags: [agents]
+      operationId: deleteAgent
+      description: Owner or admin.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/agents/{agentId}/probe:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/AgentId"
+    post:
+      tags: [agents]
+      operationId: probeAgent
+      description: |
+        Member or above. Connects to the agent with its stored configuration
+        and a fresh thread id, listens (voice) or sends one message (text),
+        then closes. A failed probe is still a 200 with `ok: false`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProbeRequest" }
+      responses:
+        "200":
+          description: Probe outcome.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProbeResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
   /api/v1/workspaces/{slug}/api-keys:
     parameters:
       - $ref: "#/components/parameters/Slug"
@@ -372,6 +531,12 @@ components:
 
     ConnectionId:
       name: connectionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+    AgentId:
+      name: agentId
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -610,6 +775,230 @@ components:
           type: object
           additionalProperties: { type: string }
         secret: { type: [string, "null"], maxLength: 4096 }
+
+    Modality:
+      type: string
+      enum: [voice, text]
+
+    CodecType:
+      type: string
+      enum: [vivi_live, openai_realtime, json_audio, http_json, http_stream]
+
+    KeyValue:
+      type: object
+      required: [key, value]
+      properties:
+        key: { type: string, minLength: 1, maxLength: 200 }
+        value:
+          type: string
+          maxLength: 4096
+          description: Template; may reference `{{run.thread_id}}`, `{{var.*}}`, `{{secret.*}}`, `{{session.*}}`.
+
+    PreSession:
+      type: object
+      description: Optional HTTP call made before connecting; its JSON response fields become `{{session.<name>}}`.
+      required: [method, url, headers, body, captures]
+      properties:
+        method: { type: string, enum: [GET, POST] }
+        url: { type: string, maxLength: 2048 }
+        headers:
+          type: array
+          items: { $ref: "#/components/schemas/KeyValue" }
+        body: { type: [string, "null"], maxLength: 20000, description: JSON template (POST only). }
+        captures:
+          type: array
+          items:
+            type: object
+            required: [name, path]
+            properties:
+              name: { type: string, pattern: "^[A-Za-z][A-Za-z0-9_]{0,39}$" }
+              path: { type: string, description: Dot path into the JSON response, e.g. `session_id` or `data.id`. }
+
+    Transport:
+      type: object
+      required: [url, query, headers, body, initMessages, preSession]
+      properties:
+        url:
+          type: string
+          maxLength: 2048
+          description: |
+            `wss://` or `https://` (`ws`/`http` only with private networking).
+            Scheme and host are literal; the path may contain templates. No query
+            string here: use `query`.
+        query:
+          type: array
+          items: { $ref: "#/components/schemas/KeyValue" }
+        headers:
+          type: array
+          items: { $ref: "#/components/schemas/KeyValue" }
+        body:
+          type: [string, "null"]
+          maxLength: 20000
+          description: HTTP agents only. JSON template that must reference `{{message}}`.
+        initMessages:
+          type: array
+          maxItems: 10
+          description: WebSocket agents only. JSON templates sent right after connecting.
+          items: { type: string, maxLength: 20000 }
+        preSession:
+          oneOf:
+            - $ref: "#/components/schemas/PreSession"
+            - type: "null"
+
+    Codec:
+      type: object
+      required: [type, options]
+      properties:
+        type: { $ref: "#/components/schemas/CodecType" }
+        options:
+          type: object
+          description: Values for the codec's option fields; omitted options take their default.
+          additionalProperties: { type: string }
+
+    AgentCodecSpec:
+      type: object
+      required: [codec, label, description, modality, fields]
+      properties:
+        codec: { $ref: "#/components/schemas/CodecType" }
+        label: { type: string }
+        description: { type: string }
+        modality: { $ref: "#/components/schemas/Modality" }
+        fields:
+          type: array
+          items: { $ref: "#/components/schemas/CodecField" }
+
+    CodecField:
+      type: object
+      required: [key, label, type, required]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        type: { type: string, enum: [text, number, boolean, json] }
+        required: { type: boolean }
+        default: { type: [string, "null"] }
+        placeholder: { type: [string, "null"] }
+        help: { type: [string, "null"] }
+
+    AgentInput:
+      type: object
+      required: [name, description, modality, transport, codec, variables, secrets, traceConnectionId, traceSessionId]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string, maxLength: 20000 }
+        modality: { $ref: "#/components/schemas/Modality" }
+        transport: { $ref: "#/components/schemas/Transport" }
+        codec: { $ref: "#/components/schemas/Codec" }
+        variables:
+          type: array
+          maxItems: 50
+          description: Non-secret values referenced as `{{var.<key>}}`.
+          items: { $ref: "#/components/schemas/KeyValue" }
+        secrets:
+          type: array
+          maxItems: 20
+          description: Referenced as `{{secret.<name>}}`. An empty `value` keeps the stored one (update only).
+          items:
+            type: object
+            required: [name, value]
+            properties:
+              name: { type: string, pattern: "^[A-Za-z][A-Za-z0-9_]{0,39}$" }
+              value: { type: string, maxLength: 4096 }
+        traceConnectionId:
+          type: [string, "null"]
+          format: uuid
+          description: A `traces` connection of the same workspace.
+        traceSessionId:
+          type: string
+          maxLength: 500
+          description: Template of the id the agent uses as its trace session id. Default `{{run.thread_id}}`.
+
+    Agent:
+      type: object
+      required: [id, name, description, modality, transport, codec, variables, secrets, traceConnectionId, traceSessionId, createdBy, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        modality: { $ref: "#/components/schemas/Modality" }
+        transport: { $ref: "#/components/schemas/Transport" }
+        codec: { $ref: "#/components/schemas/Codec" }
+        variables:
+          type: array
+          items: { $ref: "#/components/schemas/KeyValue" }
+        secrets:
+          type: array
+          items:
+            type: object
+            required: [name, hint]
+            properties:
+              name: { type: string }
+              hint: { type: string, description: e.g. `•••• 9f2c` }
+        traceConnectionId: { type: [string, "null"], format: uuid }
+        traceSessionId: { type: string }
+        createdBy:
+          oneOf:
+            - type: object
+              required: [id, name]
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+            - type: "null"
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AgentPreset:
+      type: object
+      required: [id, label, description, modality, draft, secretNames]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        description: { type: string }
+        modality: { $ref: "#/components/schemas/Modality" }
+        draft:
+          type: object
+          required: [transport, codec, variables, traceSessionId]
+          description: Values to fill the editor with; variable values may be empty placeholders.
+          properties:
+            transport: { $ref: "#/components/schemas/Transport" }
+            codec: { $ref: "#/components/schemas/Codec" }
+            variables:
+              type: array
+              items: { $ref: "#/components/schemas/KeyValue" }
+            traceSessionId: { type: string }
+        secretNames:
+          type: array
+          items: { type: string }
+
+    ProbeRequest:
+      type: object
+      properties:
+        message: { type: string, minLength: 1, maxLength: 2000, description: Text agents only. Default "Hello". }
+        durationSeconds: { type: integer, minimum: 1, maximum: 30, description: Default 8. }
+
+    ProbeEvent:
+      type: object
+      required: [atMs, kind, detail]
+      properties:
+        atMs: { type: integer, description: Milliseconds since the probe started. }
+        kind:
+          type: string
+          enum: [connect, send, receive, ready, audio, transcript, reply, error, close, info]
+        detail: { type: string, description: Never contains secret values. }
+
+    ProbeResult:
+      type: object
+      required: [ok, summary, threadId, traceSessionId, events, audioMs, transcript, reply]
+      properties:
+        ok: { type: boolean }
+        summary: { type: string }
+        threadId: { type: string, format: uuid }
+        traceSessionId: { type: string, description: Resolved trace session id for this probe. }
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/ProbeEvent" }
+        audioMs: { type: integer, description: Milliseconds of agent audio received. }
+        transcript: { type: string, description: Agent transcript captured (voice). }
+        reply: { type: string, description: Agent reply (text). }
 
     CreatedApiKey:
       allOf:

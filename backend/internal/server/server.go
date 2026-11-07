@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"testforge/internal/agent"
 	"testforge/internal/apikey"
 	"testforge/internal/authn"
 	"testforge/internal/connection"
@@ -31,6 +32,7 @@ type server struct {
 	workspaces *workspace.Service
 	apiKeys    *apikey.Service
 	conns      *connection.Service
+	agents     *agent.Service
 }
 
 // New builds the API handler. It fails when the secret key is invalid.
@@ -45,6 +47,7 @@ func New(pool *pgxpool.Pool, cfg config.Config) (http.Handler, error) {
 		workspaces: workspace.NewService(pool),
 		apiKeys:    apikey.NewService(pool),
 		conns:      connection.NewService(pool, box, cfg.AllowPrivateNetwork),
+		agents:     agent.NewService(pool, box, cfg.AllowPrivateNetwork),
 	}
 	s.identity = identity.NewService(pool, cfg.SessionTTL, func(ctx context.Context, tx pgx.Tx, u identity.User) error {
 		return workspace.CreatePersonal(ctx, tx, u.ID, u.Name)
@@ -72,6 +75,15 @@ func New(pool *pgxpool.Pool, cfg config.Config) (http.Handler, error) {
 	mux.Handle("PATCH /api/v1/workspaces/{slug}/connections/{id}", s.inWorkspace(s.updateConnection))
 	mux.Handle("DELETE /api/v1/workspaces/{slug}/connections/{id}", s.inWorkspace(s.deleteConnection))
 	mux.Handle("POST /api/v1/workspaces/{slug}/connections/{id}/test", s.inWorkspace(s.testConnection))
+
+	mux.Handle("GET /api/v1/agent-codecs", s.authed(s.listAgentCodecs))
+	mux.Handle("GET /api/v1/agent-presets", s.authed(s.listAgentPresets))
+	mux.Handle("GET /api/v1/workspaces/{slug}/agents", s.inWorkspace(s.listAgents))
+	mux.Handle("POST /api/v1/workspaces/{slug}/agents", s.inWorkspace(s.createAgent))
+	mux.Handle("GET /api/v1/workspaces/{slug}/agents/{id}", s.inWorkspace(s.getAgent))
+	mux.Handle("PUT /api/v1/workspaces/{slug}/agents/{id}", s.inWorkspace(s.updateAgent))
+	mux.Handle("DELETE /api/v1/workspaces/{slug}/agents/{id}", s.inWorkspace(s.deleteAgent))
+	mux.Handle("POST /api/v1/workspaces/{slug}/agents/{id}/probe", s.inWorkspace(s.probeAgent))
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, apperr.NotFound("Route not found."))
