@@ -22,8 +22,8 @@ Out of scope (Runs milestone): executing scenarios, runtime defaults for simulat
 |---|---|---|---|---|
 | T1 | S1-S7 | inline | done | contract in `backend/api/openapi.yaml` |
 | T2 | S1-S6 | inline | done | 5 integration tests RED (404s) → GREEN; full suite green |
-| T3 | S7 | delegated (parallel with T2: disjoint surface `apps/web/**`) | pending | |
-| T4 | S1-S7 | inline E2E | pending | |
+| T3 | S7 | delegated (parallel with T2: disjoint surface `apps/web/**`) | done | 75 Vitest tests; lint/typecheck/build green |
+| T4 | S1-S7 | inline E2E | done | persona created in UI, scenario created in editor (server-assigned criterion id, defaults), list + tag filter against the real API |
 
 Risk: item 3 is touched only by S6 changing `DELETE /agents/{id}` and connection deletes for agents/scenarios that are referenced (unreleased API, no consumers yet). No secrets or outbound calls in this milestone.
 
@@ -32,3 +32,4 @@ Risk: item 3 is touched only by S6 changing `DELETE /agents/{id}` and connection
 - **L1** (2026-11-06, user, from Foundation L1): "...el poder generar conexion con el agente, el poder crear escenarios de pruebas y tener todo el informe de las evaluaciones...".
 - **L2** (2026-11-07, user): "Sí, Scenarios".
 - **L3** (2026-11-07): Legacy `modules/scenarios/domain.py`: temperaments polite, hurried, skeptical, confused, angry, friendly, calm, detailed; limits name 160, tags 20×40, context 20000, goal 5000, instructions 10000, persona name 120 / notes 2000, facts 50 (key 80, value 500), criteria 1..30 (text 500, weights total 100, unique ids), interruptions ≤10 (after 300..60000 ms, unique agent turn), end conditions max duration 30..1800 default 360, max silence 5..120 default 15 (voice), max turns 1..100 default 20 (text), hang up when goal_or_goodbye|goodbye. Decisions: personas become a workspace resource; simulator/judge connection and model are per scenario and optional until Runs defines defaults; added `hangUpWhen: never`.
+- **L4** (2026-11-07): E2E found a typed locale appended to the prefilled `en-US` and accepted by a loose regex; tightened to language[-Script][-REGION] (`es-MX-extra` and `en-USA-MX` now rejected; shape-valid tags like `en-Uses-MX` still pass without a code list). Follow-ups noted by the web writer: codec catalog has no interruption-support flag (the UI shows interruptions for every voice agent and relies on the server error); hidden end-condition fields are sent as defaults.

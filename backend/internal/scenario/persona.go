@@ -17,7 +17,8 @@ import (
 )
 
 var (
-	localePattern     = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$`)
+	// language[-Script][-REGION], e.g. en, es-MX, zh-Hant-TW, es-419 (case-insensitive).
+	localePattern     = regexp.MustCompile(`^(?i)[a-z]{2,3}(-[a-z]{4})?(-([a-z]{2}|[0-9]{3}))?$`)
 	temperaments      = []string{"polite", "hurried", "skeptical", "confused", "angry", "friendly", "calm", "detailed"}
 	errPersonaMissing = apperr.NotFound("Persona not found.")
 	errPersonaTaken   = apperr.Conflict("A persona with this name already exists in this workspace.")
