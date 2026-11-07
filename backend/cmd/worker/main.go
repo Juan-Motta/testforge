@@ -54,6 +54,7 @@ func runWorker() error {
 	}
 	w := run.NewWorker(pool, connection.NewService(pool, box, cfg.AllowPrivateNetwork),
 		agent.NewService(pool, box, cfg.AllowPrivateNetwork), engines, run.LocalStorage{Dir: cfg.ArtifactsDir}, cfg.WorkerConcurrency)
+	w.EnableJudging(run.JudgeOptions{Concurrency: cfg.JudgeConcurrency, TraceWait: cfg.JudgeTraceWait, AllowPrivate: cfg.AllowPrivateNetwork})
 	w.Run(ctx)
 	slog.Info("worker stopped")
 	return nil

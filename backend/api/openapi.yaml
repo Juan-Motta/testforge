@@ -23,6 +23,7 @@ tags:
   - name: agents
   - name: scenarios
   - name: runs
+  - name: evaluation
 
 paths:
   /healthz:
@@ -910,6 +911,56 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/v1/workspaces/{slug}/runs/{id}/judgement:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [evaluation]
+      operationId: getJudgement
+      responses:
+        "200":
+          description: The run's judgement (status, result, traces).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Judgement" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [evaluation]
+      operationId: rejudgeRun
+      description: Member or above. Queues a new judgement of a completed run (409 for runs that did not complete).
+      responses:
+        "202":
+          description: Queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Judgement" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/v1/workspaces/{slug}/reports/overview:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [evaluation]
+      operationId: reportsOverview
+      parameters:
+        - { name: days, in: query, schema: { type: integer, enum: [7, 30, 90], default: 7 } }
+        - { name: agentId, in: query, schema: { type: string, format: uuid } }
+        - { name: scenarioId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Aggregated results for the period.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportOverview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
   /api/v1/workspaces/{slug}/api-keys:
     parameters:
       - $ref: "#/components/parameters/Slug"
@@ -1675,7 +1726,7 @@ components:
 
     RunSummary:
       type: object
-      required: [id, batchId, scenarioId, scenarioName, agentId, agentName, personaName, modality, status, endReason, error, attempt, createdAt, startedAt, finishedAt, metrics]
+      required: [id, batchId, scenarioId, scenarioName, agentId, agentName, personaName, modality, status, endReason, error, attempt, createdAt, startedAt, finishedAt, metrics, judgementStatus, score, passed]
       properties:
         id: { type: string, format: uuid }
         batchId: { type: string, format: uuid }
@@ -1698,6 +1749,13 @@ components:
           oneOf:
             - $ref: "#/components/schemas/RunMetrics"
             - type: "null"
+        judgementStatus:
+          oneOf:
+            - $ref: "#/components/schemas/JudgementStatus"
+            - type: "null"
+          description: Null while the run has not completed.
+        score: { type: [integer, "null"], description: 0-100 once judged. }
+        passed: { type: [boolean, "null"] }
 
     TranscriptTurn:
       type: object
@@ -1724,6 +1782,168 @@ components:
             audioTracks:
               type: array
               items: { type: string, enum: [user, agent, conversation] }
+
+    JudgementStatus:
+      type: string
+      enum: [queued, waiting_traces, running, completed, failed, skipped]
+
+    Verdict:
+      type: string
+      enum: [pass, partial, fail, not_observable]
+
+    Evidence:
+      type: object
+      required: [source, ref, quote]
+      properties:
+        source: { type: string, enum: [transcript, trace, timing] }
+        ref: { type: string, description: "A3 = agent's 3rd turn, U2 = user's 2nd turn, T4 = timing row, R2 = trace row." }
+        quote: { type: string }
+
+    CriterionResult:
+      type: object
+      required: [criterionId, text, kind, source, weight, verdict, band, score, failureTags, capped, reasoning, evidence, unobservableReason, sampleBands]
+      properties:
+        criterionId: { type: string }
+        text: { type: string }
+        kind: { type: string, enum: [must, should] }
+        source: { type: string, enum: [transcript, trace, timing] }
+        weight: { type: integer }
+        verdict: { $ref: "#/components/schemas/Verdict" }
+        band: { type: [integer, "null"], minimum: 1, maximum: 5 }
+        score: { type: [integer, "null"] }
+        failureTags: { type: array, items: { type: string } }
+        capped: { type: boolean, description: A capping tag lowered the band. }
+        reasoning: { type: string }
+        evidence: { type: array, items: { $ref: "#/components/schemas/Evidence" } }
+        unobservableReason:
+          type: [string, "null"]
+          enum: [traces_unavailable, no_timing_data, judge_marked_unobservable, judge_omitted, null]
+        sampleBands:
+          type: array
+          items: { type: [integer, "null"] }
+
+    Suggestion:
+      type: object
+      required: [title, detail, area, priority, evidenceRefs]
+      properties:
+        title: { type: string }
+        detail: { type: string }
+        area: { type: string, enum: [prompt, tools, flow, latency, voice, other] }
+        priority: { type: string, enum: [high, medium, low] }
+        evidenceRefs: { type: array, items: { type: string } }
+
+    JudgementResult:
+      type: object
+      required: [summary, score, passed, mustFailed, criteria, suggestions, strengths, failureTags, samples, inputTokens, outputTokens]
+      properties:
+        summary: { type: string }
+        score: { type: [integer, "null"] }
+        passed: { type: [boolean, "null"] }
+        mustFailed: { type: boolean }
+        criteria: { type: array, items: { $ref: "#/components/schemas/CriterionResult" } }
+        suggestions: { type: array, items: { $ref: "#/components/schemas/Suggestion" } }
+        strengths: { type: array, items: { type: string } }
+        failureTags:
+          type: object
+          additionalProperties: { type: integer }
+          description: Tag to the number of criteria carrying it.
+        samples: { type: integer, description: Successful judge samples. }
+        inputTokens: { type: integer }
+        outputTokens: { type: integer }
+
+    TraceStats:
+      type: object
+      required: [status, message, sessionId, url, traces, observations, errors, models, toolCalls, totalTokens, totalCost, slowestGenerationMs, timeToFirstTokenMs]
+      properties:
+        status: { type: string, enum: [available, unavailable, not_configured, error] }
+        message: { type: string }
+        sessionId: { type: [string, "null"] }
+        url: { type: [string, "null"], description: Langfuse session page. }
+        traces: { type: integer }
+        observations: { type: integer }
+        errors: { type: integer }
+        models: { type: array, items: { type: string } }
+        toolCalls: { type: integer }
+        totalTokens: { type: integer }
+        totalCost: { type: [number, "null"] }
+        slowestGenerationMs: { type: [integer, "null"] }
+        timeToFirstTokenMs: { type: [integer, "null"], description: Median time to first token of generations. }
+
+    Judgement:
+      type: object
+      required: [runId, status, attempt, model, error, result, traces, createdAt, updatedAt, completedAt]
+      properties:
+        runId: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/JudgementStatus" }
+        attempt: { type: integer }
+        model: { type: string }
+        error: { type: [string, "null"], description: Why it failed or was skipped. }
+        result:
+          oneOf:
+            - $ref: "#/components/schemas/JudgementResult"
+            - type: "null"
+        traces:
+          oneOf:
+            - $ref: "#/components/schemas/TraceStats"
+            - type: "null"
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+
+    ReportOverview:
+      type: object
+      required: [days, totals, judged, avgScore, passRate, latencyP50Ms, latencyP95Ms, llmTokens, trend, weakestCriteria, scenarios, failureTags]
+      properties:
+        days: { type: integer }
+        totals:
+          type: object
+          description: Runs per status in the period.
+          additionalProperties: { type: integer }
+        judged: { type: integer }
+        avgScore: { type: [number, "null"] }
+        passRate: { type: [number, "null"], description: 0-1 over judged runs. }
+        latencyP50Ms: { type: [number, "null"], description: Average of run p50 latencies. }
+        latencyP95Ms: { type: [number, "null"] }
+        llmTokens: { type: integer }
+        trend:
+          type: array
+          items:
+            type: object
+            required: [date, runs, avgScore, passRate]
+            properties:
+              date: { type: string, format: date }
+              runs: { type: integer }
+              avgScore: { type: [number, "null"] }
+              passRate: { type: [number, "null"] }
+        weakestCriteria:
+          type: array
+          items:
+            type: object
+            required: [scenarioId, scenarioName, criterionId, text, avgScore, failRate, judged]
+            properties:
+              scenarioId: { type: [string, "null"], format: uuid }
+              scenarioName: { type: string }
+              criterionId: { type: string }
+              text: { type: string }
+              avgScore: { type: number }
+              failRate: { type: number }
+              judged: { type: integer }
+        scenarios:
+          type: array
+          items:
+            type: object
+            required: [scenarioId, scenarioName, agentName, runs, avgScore, passRate, lastRunAt]
+            properties:
+              scenarioId: { type: [string, "null"], format: uuid }
+              scenarioName: { type: string }
+              agentName: { type: string }
+              runs: { type: integer }
+              avgScore: { type: [number, "null"] }
+              passRate: { type: [number, "null"] }
+              lastRunAt: { type: string, format: date-time }
+        failureTags:
+          type: object
+          additionalProperties: { type: integer }
 
     CreatedApiKey:
       allOf:

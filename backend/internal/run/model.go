@@ -95,6 +95,10 @@ type Summary struct {
 	StartedAt    *time.Time `json:"startedAt"`
 	FinishedAt   *time.Time `json:"finishedAt"`
 	Metrics      *Metrics   `json:"metrics"`
+	// JudgementStatus is nil until the run completes.
+	JudgementStatus *string `json:"judgementStatus"`
+	Score           *int    `json:"score"`
+	Passed          *bool   `json:"passed"`
 }
 
 // Run is a run with its results.

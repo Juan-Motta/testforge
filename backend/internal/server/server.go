@@ -116,6 +116,9 @@ func New(pool *pgxpool.Pool, cfg config.Config) (http.Handler, error) {
 	mux.Handle("GET /api/v1/workspaces/{slug}/runs/{id}/audio/{track}", s.inWorkspace(s.runAudio))
 	mux.Handle("GET /api/v1/workspaces/{slug}/run-batches", s.inWorkspace(s.listRunBatches))
 	mux.Handle("POST /api/v1/workspaces/{slug}/run-batches/{id}/cancel", s.inWorkspace(s.cancelRunBatch))
+	mux.Handle("GET /api/v1/workspaces/{slug}/runs/{id}/judgement", s.inWorkspace(s.getJudgement))
+	mux.Handle("POST /api/v1/workspaces/{slug}/runs/{id}/judgement", s.inWorkspace(s.rejudgeRun))
+	mux.Handle("GET /api/v1/workspaces/{slug}/reports/overview", s.inWorkspace(s.reportsOverview))
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, apperr.NotFound("Route not found."))

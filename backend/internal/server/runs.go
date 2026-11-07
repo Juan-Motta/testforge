@@ -159,3 +159,24 @@ func (s *server) runEvents(w http.ResponseWriter, r *http.Request, _ authn.Princ
 		}
 	}
 }
+
+func (s *server) getJudgement(w http.ResponseWriter, r *http.Request, _ authn.Principal, ws workspace.Workspace) {
+	j, err := s.runs.GetJudgement(r.Context(), ws, r.PathValue("id"))
+	respond(w, r, http.StatusOK, j, err)
+}
+
+func (s *server) rejudgeRun(w http.ResponseWriter, r *http.Request, _ authn.Principal, ws workspace.Workspace) {
+	j, err := s.runs.Rejudge(r.Context(), ws, r.PathValue("id"))
+	respond(w, r, http.StatusAccepted, j, err)
+}
+
+func (s *server) reportsOverview(w http.ResponseWriter, r *http.Request, _ authn.Principal, ws workspace.Workspace) {
+	days, err := intParam(r, "days")
+	if err != nil {
+		httpx.Error(w, r, err)
+		return
+	}
+	q := r.URL.Query()
+	o, err := s.runs.ReportOverview(r.Context(), ws, run.OverviewFilter{Days: days, AgentID: q.Get("agentId"), ScenarioID: q.Get("scenarioId")})
+	respond(w, r, http.StatusOK, o, err)
+}

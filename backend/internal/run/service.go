@@ -163,13 +163,18 @@ func isNotFound(err error) bool {
 
 const selectSummary = `SELECT r.id, r.batch_id, r.scenario_id, r.snapshot->'scenario'->>'name', r.agent_id,
 	r.snapshot->'agent'->>'name', r.snapshot->'persona'->>'name', r.snapshot->'agent'->>'modality',
-	r.status, r.end_reason, r.error, r.attempt, r.created_at, r.started_at, r.finished_at, r.metrics`
+	r.status, r.end_reason, r.error, r.attempt, r.created_at, r.started_at, r.finished_at, r.metrics,
+	j.status, j.score, j.passed`
+
+// fromRuns joins the judgement each summary reports.
+const fromRuns = ` FROM runs r LEFT JOIN judgements j ON j.run_id = r.id`
 
 func scanSummary(row interface{ Scan(...any) error }, extra ...any) (Summary, error) {
 	var sm Summary
 	var metrics []byte
 	dest := append([]any{&sm.ID, &sm.BatchID, &sm.ScenarioID, &sm.ScenarioName, &sm.AgentID, &sm.AgentName, &sm.PersonaName,
-		&sm.Modality, &sm.Status, &sm.EndReason, &sm.Error, &sm.Attempt, &sm.CreatedAt, &sm.StartedAt, &sm.FinishedAt, &metrics}, extra...)
+		&sm.Modality, &sm.Status, &sm.EndReason, &sm.Error, &sm.Attempt, &sm.CreatedAt, &sm.StartedAt, &sm.FinishedAt, &metrics,
+		&sm.JudgementStatus, &sm.Score, &sm.Passed}, extra...)
 	if err := row.Scan(dest...); err != nil {
 		return Summary{}, err
 	}
@@ -230,7 +235,7 @@ func (s *Service) ListRuns(ctx context.Context, ws workspace.Workspace, f ListFi
 	if err := apperr.Invalid(fields); err != nil {
 		return nil, nil, err
 	}
-	rows, err := s.pool.Query(ctx, selectSummary+` FROM runs r WHERE `+strings.Join(where, " AND ")+
+	rows, err := s.pool.Query(ctx, selectSummary+fromRuns+` WHERE `+strings.Join(where, " AND ")+
 		` ORDER BY r.created_at DESC, r.id DESC LIMIT `+arg(f.Limit+1), args...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list runs: %w", err)
@@ -273,8 +278,8 @@ func (s *Service) GetRun(ctx context.Context, ws workspace.Workspace, id string)
 	}
 	var r Run
 	var transcript []byte
-	sm, err := scanSummary(s.pool.QueryRow(ctx, selectSummary+`, r.thread_id, r.trace_session_id, r.transcript, r.audio_tracks
-		FROM runs r WHERE r.workspace_id = $1 AND r.id = $2`, ws.ID, id),
+	sm, err := scanSummary(s.pool.QueryRow(ctx, selectSummary+`, r.thread_id, r.trace_session_id, r.transcript, r.audio_tracks`+
+		fromRuns+` WHERE r.workspace_id = $1 AND r.id = $2`, ws.ID, id),
 		&r.ThreadID, &r.TraceSessionID, &transcript, &r.AudioTracks)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Run{}, errRunMissing
@@ -293,7 +298,7 @@ func (s *Service) GetRun(ctx context.Context, ws workspace.Workspace, id string)
 }
 
 func (s *Service) summary(ctx context.Context, ws workspace.Workspace, id string) (Summary, error) {
-	sm, err := scanSummary(s.pool.QueryRow(ctx, selectSummary+` FROM runs r WHERE r.workspace_id = $1 AND r.id = $2`, ws.ID, id))
+	sm, err := scanSummary(s.pool.QueryRow(ctx, selectSummary+fromRuns+` WHERE r.workspace_id = $1 AND r.id = $2`, ws.ID, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Summary{}, errRunMissing
 	}

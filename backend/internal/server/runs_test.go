@@ -53,6 +53,11 @@ func (f *fakeEngine) Run(ctx context.Context, job run.Job, rec run.Recorder) run
 
 func startWorker(t *testing.T, e *env, engine run.Engine, concurrency int) {
 	t.Helper()
+	startWorkerWith(t, e, engine, concurrency, nil)
+}
+
+func startWorkerWith(t *testing.T, e *env, engine run.Engine, concurrency int, judging *run.JudgeOptions) {
+	t.Helper()
 	box, err := sealbox.New(e.cfg.SecretKey)
 	if err != nil {
 		t.Fatal(err)
@@ -60,6 +65,9 @@ func startWorker(t *testing.T, e *env, engine run.Engine, concurrency int) {
 	conns := connection.NewService(e.pool, box, true)
 	agents := agent.NewService(e.pool, box, true)
 	w := run.NewWorker(e.pool, conns, agents, func(string) run.Engine { return engine }, run.LocalStorage{Dir: e.cfg.ArtifactsDir}, concurrency)
+	if judging != nil {
+		w.EnableJudging(*judging)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { w.Run(ctx); close(done) }()

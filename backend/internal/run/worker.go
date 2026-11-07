@@ -79,6 +79,8 @@ type Worker struct {
 	owner       string
 	slots       chan struct{}
 	wg          sync.WaitGroup
+	judging     *JudgeOptions
+	judgeSlots  chan struct{}
 }
 
 // NewWorker builds a worker running at most concurrency runs at a time.
@@ -99,7 +101,9 @@ func (w *Worker) Run(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		w.reap(ctx)
+		w.reapJudgements(ctx)
 		w.fill(ctx)
+		w.fillJudgements(ctx)
 		select {
 		case <-ctx.Done():
 			w.wg.Wait()
@@ -334,6 +338,11 @@ func (w *Worker) finish(ctx context.Context, c *claimedRun, o Outcome) {
 			c.id, w.owner, o.Status, o.EndReason, o.Error, transcript, metrics, tracks, trace)
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
+		}
+		if o.Status == StatusCompleted {
+			if err := queueJudgement(ctx, tx, c.id, c.workspaceID, c.snapshot); err != nil {
+				return err
+			}
 		}
 		if err := recordEvent(ctx, tx, c.id, "metrics", o.Metrics); err != nil {
 			return err

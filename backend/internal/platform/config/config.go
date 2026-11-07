@@ -27,6 +27,10 @@ type Config struct {
 	ArtifactsDir string
 	// WorkerConcurrency is how many runs one worker process executes at a time.
 	WorkerConcurrency int
+	// JudgeConcurrency is how many judgements one worker evaluates at a time.
+	JudgeConcurrency int
+	// JudgeTraceWait bounds how long the worker waits for Langfuse traces to settle.
+	JudgeTraceWait time.Duration
 }
 
 // Load reads the configuration, applying development defaults.
@@ -61,6 +65,22 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("config WORKER_CONCURRENCY: use 1 to 50")
 		}
 		cfg.WorkerConcurrency = n
+	}
+	cfg.JudgeConcurrency = 2
+	if v := os.Getenv("JUDGE_CONCURRENCY"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 20 {
+			return Config{}, fmt.Errorf("config JUDGE_CONCURRENCY: use 1 to 20")
+		}
+		cfg.JudgeConcurrency = n
+	}
+	cfg.JudgeTraceWait = 3 * time.Minute
+	if v := os.Getenv("JUDGE_TRACE_WAIT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d < 0 || d > time.Hour {
+			return Config{}, fmt.Errorf("config JUDGE_TRACE_WAIT: use a duration like 3m (at most 1h)")
+		}
+		cfg.JudgeTraceWait = d
 	}
 	// Required by `serve` (validated when the server is built), not by `migrate`.
 	cfg.SecretKey = os.Getenv("SECRET_KEY")
