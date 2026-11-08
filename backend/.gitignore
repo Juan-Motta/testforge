@@ -1,0 +1,16 @@
+# Build output
+bin/
+coverage/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Local run artifacts
+data/
+
+# Tooling
+.DS_Store
+*.log
+.codegraph/

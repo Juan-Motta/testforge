@@ -23,16 +23,18 @@ simulated user through a scenario, collects transcripts, audio and traces
 ## Layout
 
 ```text
-apps/web/              Next.js (App Router), shadcn/ui, Tailwind CSS
+frontend/              Next.js (App Router), shadcn/ui, Tailwind CSS
 backend/
   api/openapi.yaml     API contract (source of truth for every client)
   cmd/api/             HTTP API binary (also runs migrations)
-  cmd/worker/          Job worker binary (runs, judgements) — later
+  cmd/worker/          Job worker binary (runs, judgements)
+  cmd/testforge/       CLI and MCP server binary
   internal/platform/   config, database, HTTP helpers, crypto
   internal/<feature>/  domain + service + store + http per feature
   migrations/          SQL migrations (goose, embedded)
-docs/                  architecture and decisions
-odd/tasks/             feature documents (specs, tasks, log)
+  docs/                architecture and decisions
+  odd/tasks/           feature documents (specs, tasks, log)
+  Makefile             backend dev targets
 compose.yaml           local Postgres (and object storage later)
 ```
 

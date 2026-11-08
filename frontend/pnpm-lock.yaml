@@ -164,9 +164,7 @@ settings:
 
 importers:
 
-  .: {}
-
-  apps/web:
+  .:
     dependencies:
       '@hookform/resolvers':
         specifier: ^7.0.3

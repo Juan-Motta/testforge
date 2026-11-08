@@ -3,8 +3,12 @@
 Test voice and text AI agents: connect to an agent, run scenarios with a
 simulated user, pull traces from Langfuse, evaluate and report.
 
+The repository has two projects: `backend/` (Go API, worker, CLI and MCP; this
+folder) and `frontend/` (Next.js web app, see [its README](../frontend/README.md)).
+`compose.yaml` at the root runs the local Postgres.
+
 See [docs/architecture.md](docs/architecture.md) for the design and roadmap,
-and [backend/api/openapi.yaml](backend/api/openapi.yaml) for the API contract.
+and [api/openapi.yaml](api/openapi.yaml) for the API contract.
 
 ## Requirements
 
@@ -15,11 +19,14 @@ and [backend/api/openapi.yaml](backend/api/openapi.yaml) for the API contract.
 ## Quick start
 
 ```bash
+cd backend
 make db-up      # Postgres on localhost:5433
 make api        # Go API on :8080 (applies migrations)
-make worker     # executes queued runs (separate terminal)
+make worker     # executes queued runs (separate terminal, in backend/)
+
+cd frontend
 pnpm install
-make web        # Next.js on :3000, proxies /api to the Go API
+pnpm dev        # Next.js on :3000, proxies /api to the Go API
 ```
 
 Open http://localhost:3000 and sign up.
@@ -50,8 +57,8 @@ The web app reads `API_URL` (default `http://localhost:8080`). `next dev` reads 
 ## Tests
 
 ```bash
-make test       # backend: unit + integration tests against a throwaway database
-pnpm --filter web lint && pnpm --filter web build
+make test                                      # in backend/: unit + integration tests against a throwaway database
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # in frontend/
 ```
 
 ## Authentication
@@ -67,15 +74,15 @@ pnpm --filter web lint && pnpm --filter web build
 MCP server for AI assistants. Both use a workspace API key.
 
 ```bash
-make build-cli
+make build-cli   # in backend/
 ```
 
 ```bash
-backend/bin/testforge login --url https://testforge.example.com
+bin/testforge login --url https://testforge.example.com
 ```
 
 ```bash
-backend/bin/testforge runs launch --tag smoke --label "$GIT_SHA" --wait
+bin/testforge runs launch --tag smoke --label "$GIT_SHA" --wait
 ```
 
 `login` prompts for the key, or reads it from `TESTFORGE_API_KEY` or stdin. It
