@@ -22,11 +22,11 @@ Out of scope (later phases): voice sandbox agents, HTTP tools, Langfuse traces f
 
 | ID | Specs | Route | Status | Evidence |
 |---|---|---|---|---|
-| T1 | S1-S5 | inline | pending | contract in `backend/api/openapi.yaml` |
-| T2 | S1-S4 | inline | pending | |
-| T3 | S5 | inline | pending | |
-| T4 | S6 | delegated (parallel with T2-T3: disjoint surface `frontend/**`) | pending | |
-| T5 | S1-S7 | inline E2E + independent verifier (Risk item 2: link mints API keys; chat accepts API keys) | pending | |
+| T1 | S1-S5 | inline | done | contract in `backend/api/openapi.yaml` (`afecea8`); no new lint errors beyond the existing operation-summary style |
+| T2 | S1-S4 | inline | done | `afecea8`; integration tests: CRUD/validation/tenancy/viewer, tool loop + history, fault injection, 8-round limit, provider error redaction, long-term memory, link + scenario run end to end |
+| T3 | S5 | inline | done | `afecea8`; generate agent/tool drafts, invalid draft 502, field validation |
+| T4 | S6 | delegated (parallel with T2-T3: disjoint surface `frontend/**`) | done | `76a95b2`; 158 Vitest tests, lint/typecheck/build green; browser E2E on Docker with a fake OpenAI: generate draft → save → playground tool call → link → probe through `api:8080` |
+| T5 | S1-S7 | inline E2E + independent verifier (Risk item 2: link mints API keys; chat accepts API keys) | done | verifier: S1-S7 PASS, no blockers; probes: tenancy, viewer, link key revoked on failure, no secret in responses, history never starts with orphan tool, LIKE escaping |
 
 ## Log
 
@@ -35,3 +35,5 @@ Out of scope (later phases): voice sandbox agents, HTTP tools, Langfuse traces f
 - **L3** (2026-11-08, user): "iniciemos, ademas algo que me gustaria es poder generar esas tools con ia, es decir poder usar ia para generarlas y poder automatizar todo e incluso poder generar la config de un agente con ia seria posible?"
 - **L4** (2026-11-08, user): "sabiendo que los principales proveedores que usare seran azure oepnai y open ai".
 - **L5** (2026-11-08): Decisions: this delivery pulls long-term memory and fault injection forward from phase 2 (both small); the hosted endpoint is the workspace route authenticated by a workspace API key, so no new credential type; tool calling uses Chat Completions `tools` (OpenAI/Azure); generated tool schemas come back as a JSON string because strict structured outputs cannot describe arbitrary schemas.
+- **L6** (2026-11-08): Backend and web committed (`afecea8`, `76a95b2`). Viewers cannot chat (the UI hides the playground for them); chat 403 added to the contract. Browser E2E passed on an isolated compose project.
+- **L7** (2026-11-08): Verifier advisories: linked key is a full member key that outlives the agents (accepted design); link needs a reachable PUBLIC_API_URL; 8 rounds counts model requests; concurrent turns on one thread can interleave; generate `toolNames` now capped (20 names, 64 chars).

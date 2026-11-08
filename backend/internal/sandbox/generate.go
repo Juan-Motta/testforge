@@ -164,8 +164,12 @@ func toolPrompt(req GenerateRequest) string {
 	if a := req.Agent; a != nil {
 		fmt.Fprintf(&b, "\n\nThe tool belongs to this agent.\nName: %s\nDescription: %s\nSystem prompt:\n%s\n",
 			truncate(a.Name, 100), truncate(a.Description, 2000), truncate(a.SystemPrompt, 8000))
-		if len(a.ToolNames) > 0 {
-			fmt.Fprintf(&b, "Existing tools (use a different name): %s\n", strings.Join(a.ToolNames, ", "))
+		names := a.ToolNames[:min(len(a.ToolNames), maxTools)]
+		for i, n := range names {
+			names[i] = truncate(n, 64)
+		}
+		if len(names) > 0 {
+			fmt.Fprintf(&b, "Existing tools (use a different name): %s\n", strings.Join(names, ", "))
 		}
 	}
 	return b.String()
