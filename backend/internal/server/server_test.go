@@ -54,11 +54,15 @@ func newEnvWith(t *testing.T, mutate func(*configOverride)) *env {
 		AllowPrivateNetwork: o.allowPrivate,
 		ArtifactsDir:        t.TempDir(),
 	}
+	// Start listening first so the server knows its own URL (linked sandbox agents call it).
+	srv := httptest.NewUnstartedServer(nil)
+	cfg.PublicAPIURL = "http://" + srv.Listener.Addr().String()
 	handler, err := server.New(pool, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(handler)
+	srv.Config.Handler = handler
+	srv.Start()
 	t.Cleanup(srv.Close)
 	return &env{t: t, srv: srv, pool: pool, cfg: cfg}
 }

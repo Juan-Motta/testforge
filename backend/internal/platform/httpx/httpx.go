@@ -22,6 +22,7 @@ var statusByKind = map[apperr.Kind]int{
 	apperr.KindConflict:     http.StatusConflict,
 	apperr.KindInvalid:      http.StatusUnprocessableEntity,
 	apperr.KindRateLimited:  http.StatusTooManyRequests,
+	apperr.KindUpstream:     http.StatusBadGateway,
 	apperr.KindInternal:     http.StatusInternalServerError,
 }
 

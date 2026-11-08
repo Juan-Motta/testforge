@@ -660,6 +660,157 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{slug}/sandbox-agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        get: operations["listSandboxAgents"];
+        put?: never;
+        /** @description Member or above. */
+        post: operations["createSandboxAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/sandbox-agents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getSandboxAgent"];
+        /** @description Member or above. Replaces the sandbox agent; stored conversations and memories are kept. */
+        put: operations["updateSandboxAgent"];
+        post?: never;
+        /** @description Member or above. Deletes its conversations and memories. Agents linked to it stay and fail until edited. */
+        delete: operations["deleteSandboxAgent"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/sandbox-agents/{id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Member or above. Sends one user message and returns the agent's reply. Accepts a
+         *     session or a workspace API key, so a linked agent can call it during runs. The
+         *     model may call tools for up to 8 rounds.
+         */
+        post: operations["chatSandboxAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/sandbox-agents/{id}/memories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listSandboxMemories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/sandbox-agents/{id}/memories/{memoryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+                memoryId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Member or above. */
+        delete: operations["deleteSandboxMemory"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/sandbox-agents/{id}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Owners and admins, session only (it creates an API key). Creates a regular text
+         *     agent named `<name> (sandbox)` that calls this sandbox agent's chat endpoint at
+         *     `PUBLIC_API_URL`, with a new workspace API key named `Sandbox: <name>` as its
+         *     `api_key` secret, so scenarios and runs can test it.
+         */
+        post: operations["linkSandboxAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/sandbox/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Member or above. Asks a model to draft a sandbox agent or one tool from a
+         *     description. Nothing is saved; the draft is validated like a saved one.
+         */
+        post: operations["generateSandboxDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{slug}/api-keys": {
         parameters: {
             query?: never;
@@ -707,7 +858,7 @@ export interface components {
         Error: {
             error: {
                 /** @enum {string} */
-                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "invalid" | "rate_limited" | "internal";
+                code: "unauthorized" | "forbidden" | "not_found" | "conflict" | "invalid" | "rate_limited" | "upstream_error" | "internal";
                 message: string;
                 /** @description Field name to validation message. */
                 fields?: {
@@ -1357,6 +1508,117 @@ export interface components {
             /** @description Full key. Shown only in this response. */
             secret: string;
         };
+        SandboxTool: {
+            /** @description Unique in the agent; `remember` and `recall` are reserved. */
+            name: string;
+            description: string;
+            /** @description JSON Schema of the arguments; its `type` must be `object`. */
+            parameters: {
+                [key: string]: unknown;
+            };
+            /** @description Text returned to the model. `{{args.<name>}}` is replaced by that argument (objects and arrays as JSON, missing as empty). */
+            response: string;
+            latencyMs: number;
+            /** @description Probability that a call fails. */
+            errorRate: number;
+            /** @description Returned as `{"error": ...}`; empty means "The tool failed." */
+            errorMessage: string;
+        };
+        SandboxMemorySettings: {
+            /** @description Keep the conversation per thread (last 50 messages). */
+            conversation: boolean;
+            /** @description Give the model `remember` and `recall` tools that persist facts per user. */
+            longTerm: boolean;
+        };
+        SandboxAgentInput: {
+            name: string;
+            description: string;
+            /**
+             * @description `voice` is not available yet (422).
+             * @enum {string}
+             */
+            modality: "text" | "voice";
+            /**
+             * Format: uuid
+             * @description An OpenAI or Azure OpenAI connection.
+             */
+            connectionId: string;
+            /** @description Model */
+            model: string;
+            systemPrompt: string;
+            temperature: number | null;
+            memory: components["schemas"]["SandboxMemorySettings"];
+            tools: components["schemas"]["SandboxTool"][];
+        };
+        SandboxAgent: components["schemas"]["SandboxAgentInput"] & {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SandboxChatRequest: {
+            message: string;
+            /** @description Omit to start a new thread. */
+            threadId?: string | null;
+            /** @description Owner of long-term memories; default `anonymous`. */
+            userId?: string | null;
+        };
+        SandboxToolCall: {
+            name: string;
+            /** @description Arguments as the model sent them (JSON text). */
+            arguments: string;
+            result: string;
+            error: boolean;
+            latencyMs: number;
+        };
+        SandboxChatReply: {
+            message: string;
+            threadId: string;
+            toolCalls: components["schemas"]["SandboxToolCall"][];
+            usage: {
+                inputTokens: number;
+                outputTokens: number;
+            };
+        };
+        SandboxMemory: {
+            /** Format: uuid */
+            id: string;
+            userId: string;
+            content: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        SandboxGenerateRequest: {
+            /** @enum {string} */
+            kind: "agent" | "tool";
+            /**
+             * Format: uuid
+             * @description A connection with the `llm` capability.
+             */
+            connectionId: string;
+            model: string;
+            description: string;
+            /** @description For kind `tool`, the agent being edited (name, description, systemPrompt, tool names) as context. */
+            agent?: {
+                name?: string;
+                description?: string;
+                systemPrompt?: string;
+                toolNames?: string[];
+            } | null;
+        };
+        SandboxAgentDraft: {
+            name: string;
+            description: string;
+            systemPrompt: string;
+            memory: components["schemas"]["SandboxMemorySettings"];
+            tools: components["schemas"]["SandboxTool"][];
+        };
+        SandboxDraft: {
+            agent: components["schemas"]["SandboxAgentDraft"] | null;
+            tool: components["schemas"]["SandboxTool"] | null;
+        };
     };
     responses: {
         /** @description Missing or invalid credentials. */
@@ -1397,6 +1659,15 @@ export interface components {
         };
         /** @description Request body failed validation. */
         Invalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description A model provider failed or answered something unusable (`upstream_error`). */
+        Upstream: {
             headers: {
                 [name: string]: unknown;
             };
@@ -2770,6 +3041,288 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["Invalid"];
+        };
+    };
+    listSandboxAgents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sandbox agents by name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SandboxAgent"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createSandboxAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxAgentInput"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxAgent"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    getSandboxAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sandbox agent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxAgent"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateSandboxAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxAgentInput"];
+            };
+        };
+        responses: {
+            /** @description Updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxAgent"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Invalid"];
+        };
+    };
+    deleteSandboxAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    chatSandboxAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxChatRequest"];
+            };
+        };
+        responses: {
+            /** @description The reply. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxChatReply"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
+            502: components["responses"]["Upstream"];
+        };
+    };
+    listSandboxMemories: {
+        parameters: {
+            query?: {
+                /** @description Only this user's memories. Omit for every user. */
+                userId?: string;
+            };
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Long-term memories, newest first (at most 500). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SandboxMemory"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteSandboxMemory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+                memoryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    linkSandboxAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The created agent. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    generateSandboxDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description The draft. `agent` is set for kind `agent`, `tool` for kind `tool`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxDraft"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
+            502: components["responses"]["Upstream"];
         };
     };
     listApiKeys: {

@@ -24,6 +24,7 @@ tags:
   - name: scenarios
   - name: runs
   - name: evaluation
+  - name: sandbox
 
 paths:
   /healthz:
@@ -961,6 +962,209 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/Invalid" }
 
+  /api/v1/workspaces/{slug}/sandbox-agents:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    get:
+      tags: [sandbox]
+      operationId: listSandboxAgents
+      responses:
+        "200":
+          description: Sandbox agents by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/SandboxAgent" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [sandbox]
+      operationId: createSandboxAgent
+      description: Member or above.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SandboxAgentInput" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SandboxAgent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
+  /api/v1/workspaces/{slug}/sandbox-agents/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [sandbox]
+      operationId: getSandboxAgent
+      responses:
+        "200":
+          description: The sandbox agent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SandboxAgent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [sandbox]
+      operationId: updateSandboxAgent
+      description: Member or above. Replaces the sandbox agent; stored conversations and memories are kept.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SandboxAgentInput" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SandboxAgent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    delete:
+      tags: [sandbox]
+      operationId: deleteSandboxAgent
+      description: Member or above. Deletes its conversations and memories. Agents linked to it stay and fail until edited.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/sandbox-agents/{id}/chat:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    post:
+      tags: [sandbox]
+      operationId: chatSandboxAgent
+      description: |
+        Member or above. Sends one user message and returns the agent's reply. Accepts a
+        session or a workspace API key, so a linked agent can call it during runs. The
+        model may call tools for up to 8 rounds.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SandboxChatRequest" }
+      responses:
+        "200":
+          description: The reply.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SandboxChatReply" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+        "502": { $ref: "#/components/responses/Upstream" }
+
+  /api/v1/workspaces/{slug}/sandbox-agents/{id}/memories:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [sandbox]
+      operationId: listSandboxMemories
+      parameters:
+        - name: userId
+          in: query
+          description: Only this user's memories. Omit for every user.
+          schema: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: Long-term memories, newest first (at most 500).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/SandboxMemory" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/sandbox-agents/{id}/memories/{memoryId}:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+      - name: memoryId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [sandbox]
+      operationId: deleteSandboxMemory
+      description: Member or above.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/sandbox-agents/{id}/link:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+      - $ref: "#/components/parameters/ResourceId"
+    post:
+      tags: [sandbox]
+      operationId: linkSandboxAgent
+      description: |
+        Owners and admins, session only (it creates an API key). Creates a regular text
+        agent named `<name> (sandbox)` that calls this sandbox agent's chat endpoint at
+        `PUBLIC_API_URL`, with a new workspace API key named `Sandbox: <name>` as its
+        `api_key` secret, so scenarios and runs can test it.
+      responses:
+        "201":
+          description: The created agent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/workspaces/{slug}/sandbox/generate:
+    parameters:
+      - $ref: "#/components/parameters/Slug"
+    post:
+      tags: [sandbox]
+      operationId: generateSandboxDraft
+      description: |
+        Member or above. Asks a model to draft a sandbox agent or one tool from a
+        description. Nothing is saved; the draft is validated like a saved one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SandboxGenerateRequest" }
+      responses:
+        "200":
+          description: The draft. `agent` is set for kind `agent`, `tool` for kind `tool`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SandboxDraft" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+        "502": { $ref: "#/components/responses/Upstream" }
+
   /api/v1/workspaces/{slug}/api-keys:
     parameters:
       - $ref: "#/components/parameters/Slug"
@@ -1082,6 +1286,11 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    Upstream:
+      description: A model provider failed or answered something unusable (`upstream_error`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
     Error:
@@ -1094,7 +1303,7 @@ components:
           properties:
             code:
               type: string
-              enum: [unauthorized, forbidden, not_found, conflict, invalid, rate_limited, internal]
+              enum: [unauthorized, forbidden, not_found, conflict, invalid, rate_limited, upstream_error, internal]
             message: { type: string }
             fields:
               type: object
@@ -1954,6 +2163,136 @@ components:
             secret:
               type: string
               description: Full key. Shown only in this response.
+
+    SandboxTool:
+      type: object
+      required: [name, description, parameters, response, latencyMs, errorRate, errorMessage]
+      properties:
+        name: { type: string, pattern: "^[a-zA-Z0-9_-]{1,64}$", description: "Unique in the agent; `remember` and `recall` are reserved." }
+        description: { type: string, minLength: 1, maxLength: 1000 }
+        parameters:
+          type: object
+          additionalProperties: true
+          description: JSON Schema of the arguments; its `type` must be `object`.
+        response:
+          type: string
+          maxLength: 20000
+          description: Text returned to the model. `{{args.<name>}}` is replaced by that argument (objects and arrays as JSON, missing as empty).
+        latencyMs: { type: integer, minimum: 0, maximum: 30000 }
+        errorRate: { type: number, minimum: 0, maximum: 1, description: Probability that a call fails. }
+        errorMessage: { type: string, maxLength: 500, description: "Returned as `{\"error\": ...}`; empty means \"The tool failed.\"" }
+
+    SandboxMemorySettings:
+      type: object
+      required: [conversation, longTerm]
+      properties:
+        conversation: { type: boolean, description: Keep the conversation per thread (last 50 messages). }
+        longTerm: { type: boolean, description: "Give the model `remember` and `recall` tools that persist facts per user." }
+
+    SandboxAgentInput:
+      type: object
+      required: [name, description, modality, connectionId, model, systemPrompt, temperature, memory, tools]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        description: { type: string, maxLength: 2000 }
+        modality: { type: string, enum: [text, voice], description: "`voice` is not available yet (422)." }
+        connectionId: { type: string, format: uuid, description: An OpenAI or Azure OpenAI connection. }
+        model: { type: string, minLength: 1, maxLength: 200, description: Model, or deployment name for Azure OpenAI. }
+        systemPrompt: { type: string, minLength: 1, maxLength: 20000 }
+        temperature: { type: [number, "null"], minimum: 0, maximum: 2 }
+        memory: { $ref: "#/components/schemas/SandboxMemorySettings" }
+        tools: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/SandboxTool" } }
+
+    SandboxAgent:
+      allOf:
+        - $ref: "#/components/schemas/SandboxAgentInput"
+        - type: object
+          required: [id, createdAt, updatedAt]
+          properties:
+            id: { type: string, format: uuid }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+
+    SandboxChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 8000 }
+        threadId: { type: [string, "null"], maxLength: 200, description: Omit to start a new thread. }
+        userId: { type: [string, "null"], maxLength: 200, description: "Owner of long-term memories; default `anonymous`." }
+
+    SandboxToolCall:
+      type: object
+      required: [name, arguments, result, error, latencyMs]
+      properties:
+        name: { type: string }
+        arguments: { type: string, description: Arguments as the model sent them (JSON text). }
+        result: { type: string }
+        error: { type: boolean }
+        latencyMs: { type: integer }
+
+    SandboxChatReply:
+      type: object
+      required: [message, threadId, toolCalls, usage]
+      properties:
+        message: { type: string }
+        threadId: { type: string }
+        toolCalls: { type: array, items: { $ref: "#/components/schemas/SandboxToolCall" } }
+        usage:
+          type: object
+          required: [inputTokens, outputTokens]
+          properties:
+            inputTokens: { type: integer }
+            outputTokens: { type: integer }
+
+    SandboxMemory:
+      type: object
+      required: [id, userId, content, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string }
+        content: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    SandboxGenerateRequest:
+      type: object
+      required: [kind, connectionId, model, description]
+      properties:
+        kind: { type: string, enum: [agent, tool] }
+        connectionId: { type: string, format: uuid, description: A connection with the `llm` capability. }
+        model: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, minLength: 1, maxLength: 4000 }
+        agent:
+          type: [object, "null"]
+          description: For kind `tool`, the agent being edited (name, description, systemPrompt, tool names) as context.
+          properties:
+            name: { type: string }
+            description: { type: string }
+            systemPrompt: { type: string }
+            toolNames: { type: array, items: { type: string } }
+
+    SandboxAgentDraft:
+      type: object
+      required: [name, description, systemPrompt, memory, tools]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        systemPrompt: { type: string }
+        memory: { $ref: "#/components/schemas/SandboxMemorySettings" }
+        tools: { type: array, items: { $ref: "#/components/schemas/SandboxTool" } }
+
+    SandboxDraft:
+      type: object
+      required: [agent, tool]
+      properties:
+        agent:
+          oneOf:
+            - $ref: "#/components/schemas/SandboxAgentDraft"
+            - type: "null"
+        tool:
+          oneOf:
+            - $ref: "#/components/schemas/SandboxTool"
+            - type: "null"
 
 security:
   - session: []

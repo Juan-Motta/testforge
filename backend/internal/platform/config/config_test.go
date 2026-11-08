@@ -35,3 +35,20 @@ func TestJudgeTraceSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestPublicAPIURL(t *testing.T) {
+	t.Setenv("PUBLIC_API_URL", "")
+	if cfg, err := Load(); err != nil || cfg.PublicAPIURL != "http://localhost:8080" {
+		t.Fatalf("default = %q, %v", cfg.PublicAPIURL, err)
+	}
+	t.Setenv("PUBLIC_API_URL", "https://testforge.example.com/")
+	if cfg, err := Load(); err != nil || cfg.PublicAPIURL != "https://testforge.example.com" {
+		t.Fatalf("trailing slash = %q, %v", cfg.PublicAPIURL, err)
+	}
+	for _, bad := range []string{"testforge.example.com", "ftp://x", "http://"} {
+		t.Setenv("PUBLIC_API_URL", bad)
+		if _, err := Load(); err == nil {
+			t.Errorf("PUBLIC_API_URL=%q accepted", bad)
+		}
+	}
+}

@@ -65,9 +65,30 @@ The API reads environment variables; defaults suit local development.
 | `JUDGE_CONCURRENCY` | `2` | Judgements one worker process evaluates at a time (1–20) |
 | `JUDGE_TRACE_WAIT` | `3m` | How long to wait for Langfuse traces to settle before judging; `0` reads once without waiting |
 | `JUDGE_TRACE_POLL` | `20s` | How often to re-poll Langfuse while waiting (1s–10m) |
+| `PUBLIC_API_URL` | `http://localhost:8080` | Where run workers reach this API; agents linked to sandbox agents call it. Use the public https URL in production |
 | `TEST_DATABASE_URL` | `postgres://testforge:testforge@localhost:5433/postgres?sslmode=disable` | Server where tests create throwaway databases |
 
 The web app reads `API_URL` (default `http://localhost:8080`). `next dev` reads it at startup; for `next build`/`next start` the rewrite destination is fixed at **build** time, so set `API_URL` when building.
+
+## Sandbox agents
+
+The **Sandbox** section hosts test agents inside TestForge, so you can try
+scenarios, the judge and fault handling without deploying an agent.
+
+- A sandbox agent is a system prompt and a model on one of your **OpenAI or
+  Azure OpenAI** connections (tool calling uses Chat Completions `tools`).
+- **Memory**: conversation memory keeps each thread's last 50 messages;
+  long-term memory gives the model `remember` and `recall` tools that store
+  facts per user (`userId`).
+- **Mock tools**: a JSON Schema for the arguments and a canned response that can
+  insert arguments with `{{args.<name>}}`. Add latency or an error rate to see
+  how the agent copes with slow or failing tools.
+- **Generate with AI** drafts a whole agent or one tool from a description with
+  any LLM connection. Nothing is saved until you save the form.
+- **Playground**: chat with the agent and see every tool call.
+- **Use in scenarios** (owners and admins) creates a regular text agent that
+  calls the sandbox agent at `PUBLIC_API_URL` with a new API key, so scenarios,
+  runs and evaluation test it like any other agent.
 
 ## Tests
 

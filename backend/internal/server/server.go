@@ -21,6 +21,7 @@ import (
 	"testforge/internal/platform/httpx"
 	"testforge/internal/platform/sealbox"
 	"testforge/internal/run"
+	"testforge/internal/sandbox"
 	"testforge/internal/scenario"
 	"testforge/internal/workspace"
 )
@@ -37,6 +38,7 @@ type server struct {
 	agents     *agent.Service
 	scenarios  *scenario.Service
 	runs       *run.Service
+	sandbox    *sandbox.Service
 }
 
 // New builds the API handler. It fails when the secret key is invalid.
@@ -54,6 +56,8 @@ func New(pool *pgxpool.Pool, cfg config.Config) (http.Handler, error) {
 		agents:     agent.NewService(pool, box, cfg.AllowPrivateNetwork),
 		scenarios:  scenario.NewService(pool),
 	}
+	s.sandbox = sandbox.NewService(pool, s.conns, s.agents, s.apiKeys,
+		sandbox.Options{AllowPrivate: cfg.AllowPrivateNetwork, PublicAPIURL: cfg.PublicAPIURL})
 	s.runs = run.NewService(pool, s.agents, s.scenarios, run.LocalStorage{Dir: cfg.ArtifactsDir})
 	s.identity = identity.NewService(pool, cfg.SessionTTL, func(ctx context.Context, tx pgx.Tx, u identity.User) error {
 		return workspace.CreatePersonal(ctx, tx, u.ID, u.Name)
@@ -119,6 +123,17 @@ func New(pool *pgxpool.Pool, cfg config.Config) (http.Handler, error) {
 	mux.Handle("GET /api/v1/workspaces/{slug}/runs/{id}/judgement", s.inWorkspace(s.getJudgement))
 	mux.Handle("POST /api/v1/workspaces/{slug}/runs/{id}/judgement", s.inWorkspace(s.rejudgeRun))
 	mux.Handle("GET /api/v1/workspaces/{slug}/reports/overview", s.inWorkspace(s.reportsOverview))
+
+	mux.Handle("GET /api/v1/workspaces/{slug}/sandbox-agents", s.inWorkspace(s.listSandboxAgents))
+	mux.Handle("POST /api/v1/workspaces/{slug}/sandbox-agents", s.inWorkspace(s.createSandboxAgent))
+	mux.Handle("GET /api/v1/workspaces/{slug}/sandbox-agents/{id}", s.inWorkspace(s.getSandboxAgent))
+	mux.Handle("PUT /api/v1/workspaces/{slug}/sandbox-agents/{id}", s.inWorkspace(s.updateSandboxAgent))
+	mux.Handle("DELETE /api/v1/workspaces/{slug}/sandbox-agents/{id}", s.inWorkspace(s.deleteSandboxAgent))
+	mux.Handle("POST /api/v1/workspaces/{slug}/sandbox-agents/{id}/chat", s.inWorkspace(s.chatSandboxAgent))
+	mux.Handle("GET /api/v1/workspaces/{slug}/sandbox-agents/{id}/memories", s.inWorkspace(s.listSandboxMemories))
+	mux.Handle("DELETE /api/v1/workspaces/{slug}/sandbox-agents/{id}/memories/{memoryId}", s.inWorkspace(s.deleteSandboxMemory))
+	mux.Handle("POST /api/v1/workspaces/{slug}/sandbox-agents/{id}/link", s.inWorkspace(s.linkSandboxAgent))
+	mux.Handle("POST /api/v1/workspaces/{slug}/sandbox/generate", s.inWorkspace(s.generateSandboxDraft))
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, apperr.NotFound("Route not found."))

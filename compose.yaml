@@ -37,6 +37,8 @@ services:
     environment:
       <<: *backend-env
       APP_ORIGINS: ${APP_ORIGINS:-http://localhost:3000}
+      # Agents linked to sandbox agents call the API here from the worker container.
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://api:8080}
     ports:
       - "8080:8080"
     volumes:

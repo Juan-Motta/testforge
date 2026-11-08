@@ -17,6 +17,7 @@ const (
 	KindConflict     Kind = "conflict"
 	KindInvalid      Kind = "invalid"
 	KindRateLimited  Kind = "rate_limited"
+	KindUpstream     Kind = "upstream_error"
 	KindInternal     Kind = "internal"
 )
 
@@ -35,6 +36,9 @@ func Forbidden(msg string) *Error    { return &Error{Kind: KindForbidden, Messag
 func NotFound(msg string) *Error     { return &Error{Kind: KindNotFound, Message: msg} }
 func Conflict(msg string) *Error     { return &Error{Kind: KindConflict, Message: msg} }
 func RateLimited(msg string) *Error  { return &Error{Kind: KindRateLimited, Message: msg} }
+
+// Upstream reports that a model provider failed or answered something unusable.
+func Upstream(msg string) *Error { return &Error{Kind: KindUpstream, Message: msg} }
 
 // Invalid builds a validation error. It returns nil when fields is empty so
 // callers can write `if err := apperr.Invalid(fields); err != nil`.

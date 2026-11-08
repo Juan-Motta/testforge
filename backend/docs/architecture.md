@@ -63,3 +63,4 @@ An agent has a **transport** and a **codec**.
 | Runs | Worker, job queue, conversation engine, live view, artifacts in S3 |
 | Evaluation | Langfuse traces, LLM judge, reports and dashboards |
 | Clients | CLI and MCP server on top of the API |
+| Sandbox | Hosted test agents: prompt, model, memory, mock tools with fault injection, AI-generated drafts; voice and HTTP tools later |

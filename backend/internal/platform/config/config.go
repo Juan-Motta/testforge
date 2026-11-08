@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -33,6 +34,8 @@ type Config struct {
 	JudgeTraceWait time.Duration
 	// JudgeTracePoll is how often the worker re-polls Langfuse while waiting.
 	JudgeTracePoll time.Duration
+	// PublicAPIURL is where run workers reach this API; linked sandbox agents call it.
+	PublicAPIURL string
 }
 
 // Load reads the configuration, applying development defaults.
@@ -91,6 +94,10 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("config JUDGE_TRACE_POLL: use a duration like 20s (1s to 10m)")
 		}
 		cfg.JudgeTracePoll = d
+	}
+	cfg.PublicAPIURL = strings.TrimRight(env("PUBLIC_API_URL", "http://localhost:8080"), "/")
+	if u, perr := url.Parse(cfg.PublicAPIURL); perr != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return Config{}, fmt.Errorf("config PUBLIC_API_URL: must be an absolute http(s) URL")
 	}
 	// Required by `serve` (validated when the server is built), not by `migrate`.
 	cfg.SecretKey = os.Getenv("SECRET_KEY")
