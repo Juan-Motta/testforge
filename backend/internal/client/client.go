@@ -69,7 +69,9 @@ func ParseURL(raw string) (*url.URL, error) {
 }
 
 func isLoopback(host string) bool {
-	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+	// Only "localhost" and loopback IPs: other names (even *.localhost) may be
+	// resolved by DNS to a remote host.
+	if host == "localhost" {
 		return true
 	}
 	ip := net.ParseIP(host)
@@ -140,7 +142,10 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 	if err != nil {
 		return nil, fmt.Errorf("reading the response: %w", err)
 	}
-	if resp.StatusCode >= 300 {
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		return nil, &Error{Status: resp.StatusCode, Message: fmt.Sprintf("unexpected redirect (%d) from %s: check the API URL", resp.StatusCode, c.base.Host)}
+	}
+	if resp.StatusCode >= 400 {
 		e := &Error{Status: resp.StatusCode}
 		var env struct {
 			Error struct {

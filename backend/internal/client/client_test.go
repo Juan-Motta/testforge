@@ -16,7 +16,6 @@ func TestParseURL(t *testing.T) {
 		"http://localhost:8080":      "http://localhost:8080",
 		"http://127.0.0.1:8080/":     "http://127.0.0.1:8080",
 		"http://[::1]:8080":          "http://[::1]:8080",
-		"http://app.localhost:8080":  "http://app.localhost:8080",
 	}
 	for in, want := range ok {
 		u, err := ParseURL(in)
@@ -24,7 +23,7 @@ func TestParseURL(t *testing.T) {
 			t.Errorf("ParseURL(%q) = %v, %v; want %s", in, u, err, want)
 		}
 	}
-	for _, in := range []string{"", "api.example.com", "ftp://x", "http://api.example.com", "http://10.0.0.5:8080",
+	for _, in := range []string{"", "api.example.com", "ftp://x", "http://api.example.com", "http://10.0.0.5:8080", "http://app.localhost:8080", "http://localhost.evil.com",
 		"https://user:pw@api.example.com", "https://api.example.com/?a=1", "https://api.example.com/#x"} {
 		if _, err := ParseURL(in); err == nil {
 			t.Errorf("ParseURL(%q) accepted", in)
@@ -86,7 +85,7 @@ func TestRequestsAndErrors(t *testing.T) {
 		t.Fatalf("non-JSON = %v", err)
 	}
 	_, err = c.do(ctx, http.MethodGet, "/redirect", nil, nil)
-	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusFound {
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusFound || !strings.Contains(err.Error(), "unexpected redirect (302)") {
 		t.Fatalf("redirect = %v", err)
 	}
 }

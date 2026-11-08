@@ -190,7 +190,11 @@ func waitBatch(ctx context.Context, e *Env, c *client.Client, ws, batchID string
 				fmt.Fprintln(e.Stderr, progress)
 				last = progress
 			}
-			if len(runs) > 0 && done == len(runs) {
+			if len(runs) == 0 {
+				// Launch creates every run with its batch, so none means a wrong id.
+				return fail(e, fmt.Errorf("batch %s has no runs in this workspace", batchID))
+			}
+			if done == len(runs) {
 				return report(e, batchID, runs, asJSON)
 			}
 		case errors.As(err, &apiErr) || ctx.Err() != nil:

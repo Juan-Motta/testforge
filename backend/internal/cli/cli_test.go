@@ -283,7 +283,11 @@ func TestWaitJSONAndTimeout(t *testing.T) {
 		t.Fatalf("wait json = %s (%v)", h.stdout, err)
 	}
 
-	f.runs, f.settleAt, f.polls = nil, 1<<30, 0
+	f.runs, f.settleAt = nil, 0
+	if code := h.run("runs", "wait", "--batch", "b1"); code != 1 || !strings.Contains(h.stderr.String(), "batch b1 has no runs") {
+		t.Fatalf("empty batch = %d: %s", code, h.stderr)
+	}
+	f.settleAt, f.polls = 1<<30, 0
 	if code := h.run("runs", "wait", "--batch", "b1", "--timeout", "30ms"); code != 1 || !strings.Contains(h.stderr.String(), "timed out after 30ms; batch b1 is still running") {
 		t.Fatalf("timeout = %d: %s", code, h.stderr)
 	}

@@ -18,14 +18,16 @@ Out of scope: creating or editing agents/scenarios/connections from the CLI, a r
 
 | ID | Specs | Route | Status | Evidence |
 |---|---|---|---|---|
-| T1 | S1, S2 | inline | pending | |
-| T2 | S3 | inline | pending | |
-| T3 | S4 | inline | pending | |
-| T4 | S5 | inline | pending | |
-| T5 | S1-S5 | inline E2E + independent verifier (Risk item 2: API key storage/transport; item 5: new dependency) | pending | |
+| T1 | S1, S2 | inline | done | `6fe8036`; client + CLI tests (mutations of the pass rule and the stored-key URL rule turn them RED) |
+| T2 | S3 | inline | done | `6fe8036`; exit codes 0/2/1, progress, timeout, --json |
+| T3 | S4 | inline | done | `42020b3`; in-memory MCP tests (11 tools, read-only hints, tool errors); stdio smoke with the built binary |
+| T4 | S5 | inline | done | `42020b3`; README section, `make build-cli` |
+| T5 | S1-S5 | inline E2E + independent verifier (Risk item 2: API key storage/transport; item 5: new dependency) | done | verifier: S1-S5 pass, no blockers (stored key refused for every other URL spelling, perms 0700/0600, redirects not followed, key never printed, `go mod verify` + tidy clean); `internal/server/cli_test.go`: real API + worker + fake judge: login, launch --wait pass→0 and fail→2, runs get, reports, MCP get_judgement/list_runs, revoked key → 1 |
 
 ## Log
 
 - **L1** (2026-11-06, user, from Foundation L1): "...tener usuarios, workspaces y conexion via api/cli y mcp."
 - **L2** (2026-11-07, user): "Yes, CLI and MCP".
 - **L3** (2026-11-07): The API already supports workspace API keys (`Authorization: Bearer tf_...`, member role, one workspace; `GET /auth/me` lists that workspace). No legacy CLI/MCP exists. MCP Go SDK: `github.com/modelcontextprotocol/go-sdk` v1.8.0 (`mcp.NewServer`, generic `mcp.AddTool`, `StdioTransport`). Decisions: one Go binary `backend/cmd/testforge` (CLI + `mcp` subcommand) so the MCP server reuses the CLI's config and client; stdlib `flag`; the launch response has no run ids, so waiting lists runs by `batchId`.
+- **L4** (2026-11-07): `0.5` averages print with Go's round-half-even (62.5 → 62). With `TESTFORGE_URL` and `TESTFORGE_API_KEY` both set, an unreadable stored config is ignored (CI). Full `go test ./...` green.
+- **L5** (2026-11-07): Verifier advisories fixed: plain http trusts only `localhost` and loopback IPs (not `*.localhost`, which the pure-Go resolver sends to DNS); `runs wait` on a batch with no runs fails at once; a redirect reports "unexpected redirect". Left as is: an empty MCP id reaches the API as a 404 tool error; errors echo the user's own URL input.
