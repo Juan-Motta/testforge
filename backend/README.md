@@ -5,7 +5,7 @@ simulated user, pull traces from Langfuse, evaluate and report.
 
 The repository has two projects: `backend/` (Go API, worker, CLI and MCP; this
 folder) and `frontend/` (Next.js web app, see [its README](../frontend/README.md)).
-`compose.yaml` at the root runs the local Postgres.
+`compose.yaml` at the root runs the whole stack, or only Postgres for development.
 
 See [docs/architecture.md](docs/architecture.md) for the design and roadmap,
 and [api/openapi.yaml](api/openapi.yaml) for the API contract.
@@ -14,9 +14,24 @@ and [api/openapi.yaml](api/openapi.yaml) for the API contract.
 
 - Go 1.27+
 - Node.js 24+ and pnpm 12+
-- Docker (local Postgres)
+- Docker (local Postgres, or the whole stack)
 
-## Quick start
+## Run everything with Docker
+
+From the repository root:
+
+```bash
+docker compose up --build
+```
+
+This starts Postgres, the API (:8080, applies migrations), the worker and the
+web app. Open http://localhost:3000 and sign up. The compose file uses a
+development-only `SECRET_KEY` and allows private network addresses, so agents
+running on your machine are reachable at `http://host.docker.internal:<port>`.
+Override `SECRET_KEY`, `ALLOW_PRIVATE_NETWORK`, `APP_ORIGINS` or `LOG_FORMAT`
+from your shell. Run audio is kept in the `artifacts` volume.
+
+## Develop locally
 
 ```bash
 cd backend

@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const apiUrl = process.env.API_URL ?? "http://localhost:8080";
 
 const nextConfig: NextConfig = {
+  // Self-contained server in .next/standalone for the Docker image.
+  output: "standalone",
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

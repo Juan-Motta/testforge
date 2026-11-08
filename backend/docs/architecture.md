@@ -35,7 +35,8 @@ backend/
   docs/                architecture and decisions
   odd/tasks/           feature documents (specs, tasks, log)
   Makefile             backend dev targets
-compose.yaml           local Postgres (and object storage later)
+  Dockerfile           one image for the API, worker and CLI
+compose.yaml           full local stack: Postgres, API, worker, web
 ```
 
 ## Agent connection model

@@ -1,5 +1,17 @@
 name: testforge
 
+# `docker compose up --build` runs the whole stack on http://localhost:3000.
+# `make db-up` (in backend/) starts only Postgres for local development.
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgres://testforge:testforge@postgres:5432/testforge?sslmode=disable
+  # Development-only default; set SECRET_KEY (openssl rand -base64 32) outside your machine.
+  SECRET_KEY: ${SECRET_KEY:-ZGV2LW9ubHktdGVzdGZvcmdlLWtleS0zMi1ieXRlcyE=}
+  # Lets agents and providers on your machine be reached (e.g. http://host.docker.internal:...).
+  ALLOW_PRIVATE_NETWORK: ${ALLOW_PRIVATE_NETWORK:-true}
+  ARTIFACTS_DIR: /data/artifacts
+  LOG_FORMAT: ${LOG_FORMAT:-text}
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -18,5 +30,54 @@ services:
       timeout: 3s
       retries: 30
 
+  api:
+    build: ./backend
+    image: testforge-backend:local
+    command: ["api", "serve"]
+    environment:
+      <<: *backend-env
+      APP_ORIGINS: ${APP_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8080:8080"
+    volumes:
+      - artifacts:/data/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  worker:
+    build: ./backend
+    image: testforge-backend:local
+    command: ["worker"]
+    environment:
+      <<: *backend-env
+    volumes:
+      - artifacts:/data/artifacts
+    depends_on:
+      # The API applies migrations on start.
+      api:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres-data:
+  artifacts:
