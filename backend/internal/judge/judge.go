@@ -225,9 +225,7 @@ func Aggregate(in Input, judgeable []Criterion, gated map[string]string, samples
 			r.Summary, r.Suggestions, r.Strengths = s.Summary, s.Suggestions, s.Strengths
 		}
 	}
-	if r.Suggestions == nil {
-		r.Suggestions = []Suggestion{}
-	}
+	r.Suggestions = normalizeSuggestions(r.Suggestions)
 	if r.Strengths == nil {
 		r.Strengths = []string{}
 	}
@@ -348,12 +346,45 @@ func Run(ctx context.Context, client llm.Client, model string, in Input, samples
 
 var roleLine = regexp.MustCompile(`(?im)^(\s*)(system|assistant|user|developer|human)\s*:`)
 
-// escape keeps evidence inside its block: it cannot close a tag or pose as a chat role.
+var lineBreaks = strings.NewReplacer("\r\n", " ⏎ ", "\n", " ⏎ ", "\r", " ⏎ ", "\u2028", " ⏎ ", "\u2029", " ⏎ ", "\u0085", " ⏎ ")
+
+// escape keeps evidence inside its block and on its own row: it cannot close a
+// tag, pose as a chat role, or start a new numbered line (U2:, A3:, R4 …).
 func escape(s string, limit int) string {
 	s = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
+	s = lineBreaks.Replace(s)
 	s = roleLine.ReplaceAllString(s, "$1> $2:")
 	if r := []rune(s); len(r) > limit {
 		s = string(r[:limit]) + "…"
 	}
 	return s
+}
+
+var (
+	suggestionAreas      = map[string]bool{"prompt": true, "tools": true, "flow": true, "latency": true, "voice": true, "other": true}
+	suggestionPriorities = map[string]bool{"high": true, "medium": true, "low": true}
+)
+
+// normalizeSuggestions keeps judge suggestions inside the API contract even
+// when the provider does not enforce the JSON schema.
+func normalizeSuggestions(in []Suggestion) []Suggestion {
+	out := []Suggestion{}
+	for _, s := range in {
+		s.Title, s.Detail = strings.TrimSpace(s.Title), strings.TrimSpace(s.Detail)
+		if s.Title == "" {
+			continue
+		}
+		s.Area, s.Priority = strings.ToLower(strings.TrimSpace(s.Area)), strings.ToLower(strings.TrimSpace(s.Priority))
+		if !suggestionAreas[s.Area] {
+			s.Area = "other"
+		}
+		if !suggestionPriorities[s.Priority] {
+			s.Priority = "medium"
+		}
+		if s.EvidenceRefs == nil {
+			s.EvidenceRefs = []string{}
+		}
+		out = append(out, s)
+	}
+	return out
 }

@@ -131,6 +131,17 @@ type page struct {
 
 var errNotFound = errors.New("not found")
 
+// HTTPError is a non-success answer from Langfuse.
+type HTTPError struct{ Status int }
+
+func (e *HTTPError) Error() string { return fmt.Sprintf("Langfuse answered HTTP %d", e.Status) }
+
+// IsPermanent reports errors that waiting will not fix (bad credentials or request).
+func IsPermanent(err error) bool {
+	var h *HTTPError
+	return errors.As(err, &h) && h.Status >= 400 && h.Status < 500 && h.Status != http.StatusRequestTimeout && h.Status != http.StatusTooManyRequests
+}
+
 func (c *Client) get(ctx context.Context, path string, q url.Values, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -154,7 +165,7 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, out any) er
 	case res.StatusCode == http.StatusNotFound:
 		return errNotFound
 	case res.StatusCode >= 300:
-		return fmt.Errorf("Langfuse answered HTTP %d", res.StatusCode)
+		return &HTTPError{Status: res.StatusCode}
 	}
 	if err := json.Unmarshal(body, out); err != nil {
 		return errors.New("Langfuse returned an unexpected response")
@@ -173,7 +184,10 @@ func (c *Client) SessionObservations(ctx context.Context, sessionID string, from
 		var p page
 		err := c.get(ctx, "/api/public/v2/observations", q, &p)
 		if errors.Is(err, errNotFound) && out == nil {
-			return c.sessionObservationsV1(ctx, sessionID)
+			return c.sessionObservationsV1(ctx, sessionID, from, to)
+		}
+		if errors.Is(err, errNotFound) {
+			err = &HTTPError{Status: http.StatusNotFound}
 		}
 		if err != nil {
 			return nil, err
@@ -181,8 +195,8 @@ func (c *Client) SessionObservations(ctx context.Context, sessionID string, from
 		for _, a := range p.Data {
 			out = append(out, a.normalize())
 		}
-		if p.Meta.Cursor == "" {
-			break
+		if p.Meta.Cursor == "" || p.Meta.Cursor == q.Get("cursor") {
+			break // a repeated cursor would loop over the same page
 		}
 		q.Set("cursor", p.Meta.Cursor)
 	}
@@ -191,7 +205,7 @@ func (c *Client) SessionObservations(ctx context.Context, sessionID string, from
 }
 
 // sessionObservationsV1 serves self-hosted Langfuse v3: traces of the session, then their observations.
-func (c *Client) sessionObservationsV1(ctx context.Context, sessionID string) ([]Observation, error) {
+func (c *Client) sessionObservationsV1(ctx context.Context, sessionID string, from, to time.Time) ([]Observation, error) {
 	var traceIDs []string
 	for pageNo := 1; pageNo <= maxPages; pageNo++ {
 		var p struct {
@@ -202,7 +216,8 @@ func (c *Client) sessionObservationsV1(ctx context.Context, sessionID string) ([
 				TotalPages int `json:"totalPages"`
 			} `json:"meta"`
 		}
-		q := url.Values{"sessionId": {sessionID}, "page": {strconv.Itoa(pageNo)}, "limit": {"100"}}
+		q := url.Values{"sessionId": {sessionID}, "page": {strconv.Itoa(pageNo)}, "limit": {"100"},
+			"fromTimestamp": {from.UTC().Format(time.RFC3339)}, "toTimestamp": {to.UTC().Format(time.RFC3339)}}
 		if err := c.get(ctx, "/api/public/traces", q, &p); err != nil {
 			return nil, err
 		}
@@ -326,9 +341,10 @@ func Digest(obs []Observation) (Stats, []string) {
 		if len(rows) >= maxDigestRows {
 			continue
 		}
-		parts := []string{fmt.Sprintf("R%d %s %s", i+1, o.Type, o.Name)}
+		// Every field is clipped to one line so a value cannot start a fake row.
+		parts := []string{fmt.Sprintf("R%d %s %s", i+1, clip(o.Type, 40), clip(o.Name, 120))}
 		if o.Model != "" {
-			parts = append(parts, "model="+o.Model)
+			parts = append(parts, "model="+clip(o.Model, 80))
 		}
 		if dur >= 0 {
 			parts = append(parts, fmt.Sprintf("duration=%dms", dur))
@@ -340,7 +356,7 @@ func Digest(obs []Observation) (Stats, []string) {
 			parts = append(parts, fmt.Sprintf("tokens=%d", o.TotalTokens))
 		}
 		if o.Level != "" && !strings.EqualFold(o.Level, "DEFAULT") {
-			parts = append(parts, "level="+o.Level)
+			parts = append(parts, "level="+clip(o.Level, 20))
 		}
 		if o.StatusMessage != "" {
 			parts = append(parts, "status="+clip(o.StatusMessage, 200))

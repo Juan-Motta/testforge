@@ -31,6 +31,8 @@ type Config struct {
 	JudgeConcurrency int
 	// JudgeTraceWait bounds how long the worker waits for Langfuse traces to settle.
 	JudgeTraceWait time.Duration
+	// JudgeTracePoll is how often the worker re-polls Langfuse while waiting.
+	JudgeTracePoll time.Duration
 }
 
 // Load reads the configuration, applying development defaults.
@@ -81,6 +83,14 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("config JUDGE_TRACE_WAIT: use a duration like 3m (at most 1h)")
 		}
 		cfg.JudgeTraceWait = d
+	}
+	cfg.JudgeTracePoll = 20 * time.Second
+	if v := os.Getenv("JUDGE_TRACE_POLL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d < time.Second || d > 10*time.Minute {
+			return Config{}, fmt.Errorf("config JUDGE_TRACE_POLL: use a duration like 20s (1s to 10m)")
+		}
+		cfg.JudgeTracePoll = d
 	}
 	// Required by `serve` (validated when the server is built), not by `migrate`.
 	cfg.SecretKey = os.Getenv("SECRET_KEY")

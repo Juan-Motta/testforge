@@ -15,13 +15,11 @@ import (
 	"testforge/internal/llm"
 )
 
-const judgeLease = 10 * time.Minute
-
 // JudgeOptions configure judging in a worker.
 type JudgeOptions struct {
 	Concurrency  int
-	TraceWait    time.Duration // how long to wait for traces to stabilize
-	TracePoll    time.Duration // how often to re-poll Langfuse
+	TraceWait    time.Duration // how long to wait for traces to stabilize; 0 reads once without waiting
+	TracePoll    time.Duration // how often to re-poll Langfuse (default 20s)
 	AllowPrivate bool
 	Samples      int
 }
@@ -31,8 +29,8 @@ func (w *Worker) EnableJudging(o JudgeOptions) {
 	if o.Concurrency < 1 {
 		o.Concurrency = 2
 	}
-	if o.TraceWait == 0 {
-		o.TraceWait = 3 * time.Minute
+	if o.TraceWait < 0 {
+		o.TraceWait = 0
 	}
 	if o.TracePoll == 0 {
 		o.TracePoll = 20 * time.Second
@@ -59,7 +57,7 @@ func (w *Worker) fillJudgements(ctx context.Context) {
 			`UPDATE judgements SET status = 'running', lease_owner = $1, lease_until = now() + make_interval(secs => $2), updated_at = now()
 			 WHERE run_id = (SELECT run_id FROM judgements WHERE status IN ('queued', 'waiting_traces') AND next_attempt_at <= now()
 			                 ORDER BY next_attempt_at, run_id FOR UPDATE SKIP LOCKED LIMIT 1)
-			 RETURNING run_id`, w.owner, judgeLease.Seconds()).Scan(&runID)
+			 RETURNING run_id`, w.owner, leaseDuration.Seconds()).Scan(&runID)
 		if err != nil {
 			<-w.judgeSlots
 			if !errors.Is(err, pgx.ErrNoRows) && ctx.Err() == nil {
@@ -71,8 +69,32 @@ func (w *Worker) fillJudgements(ctx context.Context) {
 		go func() {
 			defer w.wg.Done()
 			defer func() { <-w.judgeSlots }()
-			w.judgeRun(ctx, runID)
+			jctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			go w.judgeHeartbeat(jctx, runID, cancel)
+			w.judgeRun(jctx, runID)
 		}()
+	}
+}
+
+// judgeHeartbeat keeps the judgement's lease alive like a run's; when the lease
+// is lost (the reaper requeued it) judging stops without writing.
+func (w *Worker) judgeHeartbeat(ctx context.Context, runID string, cancel context.CancelFunc) {
+	t := time.NewTicker(heartbeatEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		tag, err := w.pool.Exec(ctx,
+			`UPDATE judgements SET lease_until = now() + make_interval(secs => $3)
+			 WHERE run_id = $1 AND lease_owner = $2 AND status = 'running'`, runID, w.owner, leaseDuration.Seconds())
+		if err == nil && tag.RowsAffected() == 0 {
+			cancel()
+			return
+		}
 	}
 }
 
@@ -118,13 +140,22 @@ func (w *Worker) judgeRun(ctx context.Context, runID string) {
 	}
 
 	// The scenario's current judge settings win, so a judge configured after
-	// the run can still evaluate it; the snapshot is the fallback.
+	// the run can still evaluate it and removing the judge stops judging; the
+	// snapshot is the fallback once the scenario is deleted.
 	connID, model := j.snap.Scenario.Judge.ConnectionID, j.snap.Scenario.Judge.Model
 	if j.scenarioID != nil {
 		var cur *string
 		var curModel string
-		if err := w.pool.QueryRow(ctx, `SELECT judge_connection_id, judge_model FROM scenarios WHERE id = $1`, *j.scenarioID).Scan(&cur, &curModel); err == nil && cur != nil && curModel != "" {
+		err := w.pool.QueryRow(ctx, `SELECT judge_connection_id, judge_model FROM scenarios WHERE id = $1`, *j.scenarioID).Scan(&cur, &curModel)
+		switch {
+		case err == nil:
 			connID, model = cur, curModel
+		case !errors.Is(err, pgx.ErrNoRows):
+			if ctx.Err() != nil {
+				return
+			}
+			w.finishJudgement(runID, JudgeFailed, "Could not load the scenario: "+err.Error(), model, nil, nil)
+			return
 		}
 	}
 	if connID == nil || model == "" {
@@ -193,7 +224,7 @@ func (w *Worker) traces(ctx context.Context, runID string, j judgeJob) (*TraceSt
 	inWindow := time.Since(since) < w.judging.TraceWait
 	count := len(obs)
 	stable := err == nil && count > 0 && j.traceCount != nil && *j.traceCount == count
-	if !stable && inWindow && ctx.Err() == nil {
+	if !stable && inWindow && ctx.Err() == nil && !langfuse.IsPermanent(err) {
 		// Langfuse ingests asynchronously: poll until the count stops changing.
 		_, _ = w.pool.Exec(context.WithoutCancel(ctx),
 			`UPDATE judgements SET status = 'waiting_traces', trace_count = $3, trace_since = $4,

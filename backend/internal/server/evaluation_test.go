@@ -196,6 +196,24 @@ func TestJudgementSkippedWithoutJudgeAndGatesTraces(t *testing.T) {
 		t.Fatalf("judgement = %v", j2)
 	}
 
+	// The scenario's current judge settings win: removing the judge makes a re-judge skip.
+	f.e.pool.Exec(t.Context(), `UPDATE scenarios SET judge_connection_id = NULL, judge_model = '' WHERE id = $1`, sc["id"])
+	expectStatus(t, f.owner.do("POST", f.path("/runs/"+id2+"/judgement"), nil), http.StatusAccepted)
+	if j, _ := waitJudgement(t, f, id2, "skipped", "completed", "failed"); j["status"] != "skipped" {
+		t.Fatalf("re-judge without a judge = %v", j)
+	}
+
+	// A run without a judgement row (completed before judging existed) uses the
+	// scenario's current judge when re-judged.
+	judgeConnID := sc["judge"].(map[string]any)["connectionId"]
+	judgeLLM.decisions = []string{judgeAnswer(f.textScenario["criteria"].([]any), 5, 5)}
+	f.e.pool.Exec(t.Context(), `DELETE FROM judgements WHERE run_id = $1`, id)
+	f.e.pool.Exec(t.Context(), `UPDATE scenarios SET judge_connection_id = $2, judge_model = 'judge-model' WHERE id = $1`, f.textScenario["id"], judgeConnID)
+	expectStatus(t, f.owner.do("POST", f.path("/runs/"+id+"/judgement"), nil), http.StatusAccepted)
+	if j, _ := waitJudgement(t, f, id, "skipped", "completed", "failed"); j["status"] != "completed" {
+		t.Fatalf("re-judge of a pre-judging run = %v", j)
+	}
+
 	// A run that did not complete cannot be judged.
 	f.e.pool.Exec(t.Context(), `UPDATE runs SET status = 'failed' WHERE id = $1`, id2)
 	expectStatus(t, f.owner.do("POST", f.path("/runs/"+id2+"/judgement"), nil), http.StatusConflict)

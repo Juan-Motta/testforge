@@ -126,3 +126,37 @@ func TestRejectedCredentialsAndEgress(t *testing.T) {
 		t.Fatal("non-langfuse connection accepted")
 	}
 }
+
+func TestPermanentErrors(t *testing.T) {
+	for code, want := range map[int]bool{401: true, 403: true, 400: true, 429: false, 500: false, 503: false} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(code) }))
+		c := mustClient(t, srv.URL)
+		_, err := c.SessionObservations(t.Context(), "s", time.Now().Add(-time.Hour), time.Now())
+		if err == nil || IsPermanent(err) != want {
+			t.Errorf("HTTP %d: err=%v permanent=%v, want %v", code, err, IsPermanent(err), want)
+		}
+		srv.Close()
+	}
+}
+
+func TestRepeatedCursorStops(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Write([]byte(`{"data":[{"id":"o1","traceId":"t1","type":"SPAN","name":"n"}],"meta":{"cursor":"same"}}`))
+	}))
+	defer srv.Close()
+	obs, err := mustClient(t, srv.URL).SessionObservations(t.Context(), "s", time.Now().Add(-time.Hour), time.Now())
+	if err != nil || len(obs) != 2 || calls != 2 {
+		t.Fatalf("obs=%d calls=%d err=%v, want 2 observations from 2 pages", len(obs), calls, err)
+	}
+}
+
+func mustClient(t *testing.T, url string) *Client {
+	t.Helper()
+	c, err := New(creds(url), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}

@@ -106,8 +106,11 @@ func (s *Service) ReportOverview(ctx context.Context, ws workspace.Workspace, f 
 		o.Totals[st] = n
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return Overview{}, fmt.Errorf("report totals: %w", err)
+	}
 
-	if err := s.pool.QueryRow(ctx, `SELECT count(j.score), avg(j.score)::float8,
+	if err := s.pool.QueryRow(ctx, `SELECT count(j.run_id), avg(j.score)::float8,
 		  avg(CASE WHEN j.passed THEN 1.0 WHEN j.passed IS NOT NULL THEN 0.0 END)::float8,
 		  avg((r.metrics->>'latencyP50Ms')::float8), avg((r.metrics->>'latencyP95Ms')::float8),
 		  coalesce(sum((r.metrics->>'llmInputTokens')::bigint + (r.metrics->>'llmOutputTokens')::bigint), 0)`+from, args...,
@@ -161,7 +164,7 @@ func (s *Service) ReportOverview(ctx context.Context, ws workspace.Workspace, f 
 		return Overview{}, fmt.Errorf("report scenarios: %w", err)
 	}
 
-	tags, err := s.pool.Query(ctx, `SELECT t.key, sum(t.value::int)
+	tags, err := s.pool.Query(ctx, `SELECT t.key, sum(CASE WHEN t.value ~ '^[0-9]{1,9}$' THEN t.value::int ELSE 0 END)
 		FROM runs r JOIN judgements j ON j.run_id = r.id AND j.status = 'completed' AND jsonb_typeof(j.result->'failureTags') = 'object'
 		CROSS JOIN LATERAL jsonb_each_text(j.result->'failureTags') AS t
 		WHERE `+where+` GROUP BY t.key`, args...)
@@ -177,5 +180,8 @@ func (s *Service) ReportOverview(ctx context.Context, ws workspace.Workspace, f 
 		o.FailureTags[k] = n
 	}
 	tags.Close()
+	if err := tags.Err(); err != nil {
+		return Overview{}, fmt.Errorf("report tags: %w", err)
+	}
 	return o, nil
 }

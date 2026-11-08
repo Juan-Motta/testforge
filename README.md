@@ -40,6 +40,9 @@ The API reads environment variables; defaults suit local development.
 | `ALLOW_PRIVATE_NETWORK` | `false` (`make api` sets `true`) | Let provider URLs use `http` and private addresses, e.g. a local Langfuse. Keep `false` in production |
 | `ARTIFACTS_DIR` | `./data/artifacts` | Where the worker stores run audio (API and worker must share it) |
 | `WORKER_CONCURRENCY` | `3` | Runs one worker process executes at a time |
+| `JUDGE_CONCURRENCY` | `2` | Judgements one worker process evaluates at a time (1–20) |
+| `JUDGE_TRACE_WAIT` | `3m` | How long to wait for Langfuse traces to settle before judging; `0` reads once without waiting |
+| `JUDGE_TRACE_POLL` | `20s` | How often to re-poll Langfuse while waiting (1s–10m) |
 | `TEST_DATABASE_URL` | `postgres://testforge:testforge@localhost:5433/postgres?sslmode=disable` | Server where tests create throwaway databases |
 
 The web app reads `API_URL` (default `http://localhost:8080`). `next dev` reads it at startup; for `next build`/`next start` the rewrite destination is fixed at **build** time, so set `API_URL` when building.

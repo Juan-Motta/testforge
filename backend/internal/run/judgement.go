@@ -124,7 +124,11 @@ func (s *Service) Rejudge(ctx context.Context, ws workspace.Workspace, runID str
 		var current string
 		err := tx.QueryRow(ctx, `SELECT status FROM judgements WHERE run_id = $1 FOR UPDATE`, runID).Scan(&current)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return queueJudgement(ctx, tx, runID, ws.ID, snap)
+			// No judgement yet (the run predates judging): queue it and let the
+			// worker apply the scenario's current judge settings.
+			_, err := tx.Exec(ctx, `INSERT INTO judgements (run_id, workspace_id, status, model) VALUES ($1, $2, 'queued', $3)
+				 ON CONFLICT (run_id) DO NOTHING`, runID, ws.ID, snap.Scenario.Judge.Model)
+			return err
 		}
 		if err != nil {
 			return err
