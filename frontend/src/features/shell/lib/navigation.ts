@@ -2,6 +2,7 @@ import {
   BarChart3Icon,
   BotIcon,
   ClipboardListIcon,
+  FlaskConicalIcon,
   HouseIcon,
   PlayIcon,
   PlugIcon,
@@ -15,6 +16,7 @@ export type SectionId =
   | "agents"
   | "scenarios"
   | "personas"
+  | "sandbox"
   | "runs"
   | "reports"
   | "connections"
@@ -72,6 +74,16 @@ export const SECTIONS: Record<SectionId, Section> = {
     emptyTitle: "No personas yet",
     keywords: ["simulated users", "callers", "voices"],
   },
+  sandbox: {
+    id: "sandbox",
+    title: "Sandbox",
+    segment: "sandbox",
+    icon: FlaskConicalIcon,
+    description:
+      "Build hosted test agents with a system prompt, memory and mock tools, chat with them and test them with scenarios.",
+    emptyTitle: "No sandbox agents yet",
+    keywords: ["playground", "mock tools", "test agents", "memory"],
+  },
   runs: {
     id: "runs",
     title: "Runs",
@@ -115,7 +127,7 @@ export const SECTIONS: Record<SectionId, Section> = {
 export type NavGroup = { label: string; items: Section[] };
 
 export const NAV_GROUPS: NavGroup[] = [
-  { label: "Build", items: [SECTIONS.agents, SECTIONS.scenarios, SECTIONS.personas] },
+  { label: "Build", items: [SECTIONS.agents, SECTIONS.sandbox, SECTIONS.scenarios, SECTIONS.personas] },
   { label: "Test", items: [SECTIONS.runs, SECTIONS.reports] },
   { label: "Configure", items: [SECTIONS.connections, SECTIONS.settings] },
 ];
