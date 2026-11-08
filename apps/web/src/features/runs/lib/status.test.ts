@@ -29,3 +29,12 @@ describe("shouldPoll", () => {
     expect(shouldPoll([])).toBe(false);
   });
 });
+
+describe("shouldPoll with judgements", () => {
+  it("also polls while a visible run's judgement is pending", () => {
+    expect(shouldPoll([{ status: "completed", judgementStatus: "waiting_traces" }])).toBe(true);
+    expect(shouldPoll([{ status: "completed", judgementStatus: "queued" }])).toBe(true);
+    expect(shouldPoll([{ status: "completed", judgementStatus: "completed" }])).toBe(false);
+    expect(shouldPoll([{ status: "failed", judgementStatus: null }])).toBe(false);
+  });
+});

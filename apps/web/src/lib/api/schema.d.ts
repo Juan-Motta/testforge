@@ -622,6 +622,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{slug}/runs/{id}/judgement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getJudgement"];
+        put?: never;
+        /** @description Member or above. Queues a new judgement of a completed run (409 for runs that did not complete). */
+        post: operations["rejudgeRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{slug}/reports/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        get: operations["reportsOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{slug}/api-keys": {
         parameters: {
             query?: never;
@@ -1154,6 +1192,11 @@ export interface components {
             /** Format: date-time */
             finishedAt: string | null;
             metrics: components["schemas"]["RunMetrics"] | null;
+            /** @description Null while the run has not completed. */
+            judgementStatus: components["schemas"]["JudgementStatus"] | null;
+            /** @description 0-100 once judged. */
+            score: number | null;
+            passed: boolean | null;
         };
         TranscriptTurn: {
             /** @enum {string} */
@@ -1171,6 +1214,144 @@ export interface components {
             traceSessionId: string | null;
             transcript: components["schemas"]["TranscriptTurn"][];
             audioTracks: ("user" | "agent" | "conversation")[];
+        };
+        /** @enum {string} */
+        JudgementStatus: "queued" | "waiting_traces" | "running" | "completed" | "failed" | "skipped";
+        /** @enum {string} */
+        Verdict: "pass" | "partial" | "fail" | "not_observable";
+        Evidence: {
+            /** @enum {string} */
+            source: "transcript" | "trace" | "timing";
+            /** @description A3 = agent's 3rd turn, U2 = user's 2nd turn, T4 = timing row, R2 = trace row. */
+            ref: string;
+            quote: string;
+        };
+        CriterionResult: {
+            criterionId: string;
+            text: string;
+            /** @enum {string} */
+            kind: "must" | "should";
+            /** @enum {string} */
+            source: "transcript" | "trace" | "timing";
+            weight: number;
+            verdict: components["schemas"]["Verdict"];
+            band: number | null;
+            score: number | null;
+            failureTags: string[];
+            /** @description A capping tag lowered the band. */
+            capped: boolean;
+            reasoning: string;
+            evidence: components["schemas"]["Evidence"][];
+            /** @enum {string|null} */
+            unobservableReason: "traces_unavailable" | "no_timing_data" | "judge_marked_unobservable" | "judge_omitted" | null;
+            sampleBands: (number | null)[];
+        };
+        Suggestion: {
+            title: string;
+            detail: string;
+            /** @enum {string} */
+            area: "prompt" | "tools" | "flow" | "latency" | "voice" | "other";
+            /** @enum {string} */
+            priority: "high" | "medium" | "low";
+            evidenceRefs: string[];
+        };
+        JudgementResult: {
+            summary: string;
+            score: number | null;
+            passed: boolean | null;
+            mustFailed: boolean;
+            criteria: components["schemas"]["CriterionResult"][];
+            suggestions: components["schemas"]["Suggestion"][];
+            strengths: string[];
+            /** @description Tag to the number of criteria carrying it. */
+            failureTags: {
+                [key: string]: number;
+            };
+            /** @description Successful judge samples. */
+            samples: number;
+            inputTokens: number;
+            outputTokens: number;
+        };
+        TraceStats: {
+            /** @enum {string} */
+            status: "available" | "unavailable" | "not_configured" | "error";
+            message: string;
+            sessionId: string | null;
+            /** @description Langfuse session page. */
+            url: string | null;
+            traces: number;
+            observations: number;
+            errors: number;
+            models: string[];
+            toolCalls: number;
+            totalTokens: number;
+            totalCost: number | null;
+            slowestGenerationMs: number | null;
+            /** @description Median time to first token of generations. */
+            timeToFirstTokenMs: number | null;
+        };
+        Judgement: {
+            /** Format: uuid */
+            runId: string;
+            status: components["schemas"]["JudgementStatus"];
+            attempt: number;
+            model: string;
+            /** @description Why it failed or was skipped. */
+            error: string | null;
+            result: components["schemas"]["JudgementResult"] | null;
+            traces: components["schemas"]["TraceStats"] | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            completedAt: string | null;
+        };
+        ReportOverview: {
+            days: number;
+            /** @description Runs per status in the period. */
+            totals: {
+                [key: string]: number;
+            };
+            judged: number;
+            avgScore: number | null;
+            /** @description 0-1 over judged runs. */
+            passRate: number | null;
+            /** @description Average of run p50 latencies. */
+            latencyP50Ms: number | null;
+            latencyP95Ms: number | null;
+            llmTokens: number;
+            trend: {
+                /** Format: date */
+                date: string;
+                runs: number;
+                avgScore: number | null;
+                passRate: number | null;
+            }[];
+            weakestCriteria: {
+                /** Format: uuid */
+                scenarioId: string | null;
+                scenarioName: string;
+                criterionId: string;
+                text: string;
+                avgScore: number;
+                failRate: number;
+                judged: number;
+            }[];
+            scenarios: {
+                /** Format: uuid */
+                scenarioId: string | null;
+                scenarioName: string;
+                agentName: string;
+                runs: number;
+                avgScore: number | null;
+                passRate: number | null;
+                /** Format: date-time */
+                lastRunAt: string;
+            }[];
+            failureTags: {
+                [key: string]: number;
+            };
         };
         CreatedApiKey: components["schemas"]["ApiKey"] & {
             /** @description Full key. Shown only in this response. */
@@ -2508,6 +2689,87 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getJudgement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run's judgement (status, result, traces). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Judgement"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    rejudgeRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Judgement"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    reportsOverview: {
+        parameters: {
+            query?: {
+                days?: 7 | 30 | 90;
+                agentId?: string;
+                scenarioId?: string;
+            };
+            header?: never;
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Aggregated results for the period. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportOverview"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Invalid"];
         };
     };
     listApiKeys: {

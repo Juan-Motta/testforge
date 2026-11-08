@@ -11,13 +11,21 @@ import { formatLatency, formatOffset, isSlowLatency } from "../lib/format";
 /** Pixels from the bottom that still count as "following" the conversation. */
 const STICK_THRESHOLD = 48;
 
+/** A request to bring one turn into view; `nonce` repeats the request for the same turn. */
+export type TurnFocus = { index: number; nonce: number };
+
 type TranscriptProps = {
   turns: LiveTurn[];
   live: boolean;
   speaking: boolean;
+  focus?: TurnFocus | null;
 };
 
-export function Transcript({ turns, live, speaking }: TranscriptProps) {
+export function transcriptTurnId(index: number): string {
+  return `transcript-turn-${index}`;
+}
+
+export function Transcript({ turns, live, speaking, focus = null }: TranscriptProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const following = useRef(true);
 
@@ -25,6 +33,16 @@ export function Transcript({ turns, live, speaking }: TranscriptProps) {
     const element = scroller.current;
     if (element && following.current) element.scrollTop = element.scrollHeight;
   }, [turns, speaking]);
+
+  // Declared after the follow effect so a requested turn wins over sticking to the bottom.
+  useEffect(() => {
+    if (!focus) return;
+    const item = document.getElementById(transcriptTurnId(focus.index));
+    if (!item) return;
+    following.current = false;
+    item.scrollIntoView({ behavior: "smooth", block: "center" });
+    item.focus({ preventScroll: true });
+  }, [focus]);
 
   if (turns.length === 0) {
     return (
@@ -48,8 +66,14 @@ export function Transcript({ turns, live, speaking }: TranscriptProps) {
       <ol className="flex flex-col gap-3">
         {turns.map((turn) => {
           const user = turn.role === "user";
+          const focused = focus?.index === turn.index;
           return (
-            <li key={turn.index} className={cn("flex flex-col gap-1", user ? "items-end" : "items-start")}>
+            <li
+              key={turn.index}
+              id={transcriptTurnId(turn.index)}
+              tabIndex={-1}
+              className={cn("flex flex-col gap-1 rounded-xl outline-none", user ? "items-end" : "items-start")}
+            >
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-medium">{user ? "Simulated user" : "Agent"}</span>
                 <span className="tabular-nums">{formatOffset(turn.startMs)}</span>
@@ -75,6 +99,8 @@ export function Transcript({ turns, live, speaking }: TranscriptProps) {
                   "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap",
                   user ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm bg-muted",
                   !turn.final && "opacity-80",
+                  "transition-shadow duration-500",
+                  focused && "ring-2 ring-brand ring-offset-2 ring-offset-card",
                 )}
               >
                 {turn.text || <span className="italic opacity-70">…</span>}

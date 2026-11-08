@@ -12,13 +12,14 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useAgents } from "@/features/agents/api/agents";
+import { useScenarios } from "@/features/scenarios/api/scenarios";
 import { SECTIONS, sectionHref } from "@/features/shell/lib/navigation";
 import { useCurrentWorkspace } from "@/features/workspaces/session-context";
 import { errorMessage } from "@/lib/api/errors";
 import type { RunBatch } from "@/lib/api/types";
 
 import { useCancelBatch, useRunBatches, useRuns } from "../api/runs";
-import { filtersFromSearchParams, filtersToQueryString, NO_RUN_FILTERS, type RunFilters } from "../lib/filters";
+import { filtersFromSearchParams, filtersToQueryString, hasRunFilters, NO_RUN_FILTERS, type RunFilters } from "../lib/filters";
 import { canOperateRuns } from "../lib/permissions";
 import { BatchList, batchTitle } from "./batch-list";
 import { RunsTable } from "./runs-table";
@@ -35,6 +36,7 @@ export function RunsPage() {
   const filters = useMemo(() => filtersFromSearchParams(new URLSearchParams(queryString)), [queryString]);
 
   const agents = useAgents(slug);
+  const scenarios = useScenarios(slug);
   const batches = useRunBatches(slug);
   const runs = useRuns(slug, filters);
   const cancelBatch = useCancelBatch(slug);
@@ -59,7 +61,7 @@ export function RunsPage() {
   }
 
   const items = runs.data?.pages.flatMap((page) => page.items);
-  const filtered = filters.batchId !== null || filters.status !== null || filters.agentId !== null;
+  const filtered = hasRunFilters(filters);
   const noRunsAtAll = items?.length === 0 && !filtered && batches.data?.length === 0;
 
   let body;
@@ -102,7 +104,7 @@ export function RunsPage() {
       <EmptyState
         icon={SearchXIcon}
         title="No runs match"
-        description="Try another batch, status or agent."
+        description="Try another batch, status, agent or scenario."
         className="min-h-60"
         action={
           <Button variant="outline" onClick={() => setFilters(NO_RUN_FILTERS)}>
@@ -146,7 +148,7 @@ export function RunsPage() {
             onCancel={cancel}
           />
           <div className="flex min-w-0 flex-col gap-4">
-            <RunsToolbar filters={filters} batches={batches.data} agents={agents.data} onChange={setFilters} />
+            <RunsToolbar filters={filters} batches={batches.data} agents={agents.data} scenarios={scenarios.data} onChange={setFilters} />
             {body}
           </div>
         </div>

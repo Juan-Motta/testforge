@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDuration, formatLatency, formatOffset, isSlowLatency, SLOW_LATENCY_MS } from "./format";
+import { formatCost, formatDuration, formatLatency, formatOffset, formatTokens, isSlowLatency, SLOW_LATENCY_MS } from "./format";
 
 describe("formatLatency", () => {
   it("shows milliseconds under a second and seconds above", () => {
@@ -33,5 +33,18 @@ describe("formatOffset", () => {
     expect(formatOffset(0)).toBe("00:00");
     expect(formatOffset(9_999)).toBe("00:09");
     expect(formatOffset(125_000)).toBe("02:05");
+  });
+});
+
+describe("formatTokens and formatCost", () => {
+  it("groups token counts", () => {
+    expect(formatTokens(1234567)).toBe("1,234,567");
+  });
+
+  it("shows Langfuse cost in dollars with enough precision for small amounts", () => {
+    expect(formatCost(null)).toBe("—");
+    expect(formatCost(0)).toBe("$0.00");
+    expect(formatCost(0.00421)).toBe("$0.0042");
+    expect(formatCost(1.5)).toBe("$1.50");
   });
 });

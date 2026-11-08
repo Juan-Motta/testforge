@@ -14,8 +14,10 @@ import { cn } from "@/lib/utils";
 import { formatDuration, formatLatency, isSlowLatency } from "../lib/format";
 import { formatEndReason } from "../lib/status";
 import { RunStatusBadge } from "./run-status-badge";
+import { ScoreCell } from "./score";
 
-const COLUMNS = ["Status", "Scenario", "Agent", "Persona", "Attempt", "Started", "Duration", "p50", "End reason"];
+const RIGHT_ALIGNED = new Set(["Score", "Duration", "p50"]);
+const COLUMNS = ["Status", "Score", "Scenario", "Agent", "Persona", "Attempt", "Started", "Duration", "p50", "End reason"];
 
 /** Stored duration, or the time between start and finish while metrics are missing. */
 export function runDurationMs(run: Pick<RunSummary, "metrics" | "startedAt" | "finishedAt">): number | null {
@@ -32,7 +34,7 @@ export function RunsTable({ slug, runs, loading }: { slug: string; runs: RunSumm
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             {COLUMNS.map((column) => (
-              <TableHead key={column} className={cn("px-3 text-xs", column === "p50" || column === "Duration" ? "text-right" : "")}>
+              <TableHead key={column} className={cn("px-3 text-xs", RIGHT_ALIGNED.has(column) && "text-right")}>
                 {column}
               </TableHead>
             ))}
@@ -65,6 +67,9 @@ export function RunsTable({ slug, runs, loading }: { slug: string; runs: RunSumm
                 >
                   <TableCell className="px-3">
                     <RunStatusBadge status={run.status} />
+                  </TableCell>
+                  <TableCell className="px-3 text-right">
+                    <ScoreCell score={run.score} passed={run.passed} judgementStatus={run.judgementStatus} />
                   </TableCell>
                   <TableCell className="max-w-56 px-3">
                     <Link href={href} className="block truncate font-medium outline-none hover:underline focus-visible:underline">

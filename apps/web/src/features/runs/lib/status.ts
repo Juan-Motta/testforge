@@ -1,4 +1,6 @@
-import type { RunStatus } from "@/lib/api/types";
+import type { JudgementStatus, RunStatus } from "@/lib/api/types";
+
+import { isJudgementPending } from "./judgement";
 
 export const RUN_STATUSES: readonly RunStatus[] = [
   "queued",
@@ -40,9 +42,9 @@ export function isActiveStatus(status: RunStatus): boolean {
   return status === "queued" || status === "running";
 }
 
-/** Lists refresh while any visible run can still change. */
-export function shouldPoll(runs: readonly { status: RunStatus }[]): boolean {
-  return runs.some((run) => isActiveStatus(run.status));
+/** Lists refresh while any visible run, or its judgement, can still change. */
+export function shouldPoll(runs: readonly { status: RunStatus; judgementStatus?: JudgementStatus | null }[]): boolean {
+  return runs.some((run) => isActiveStatus(run.status) || isJudgementPending(run.judgementStatus));
 }
 
 /** Human label of an end reason, e.g. `user_hung_up` → "User hung up". */

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/empty-state";
@@ -30,15 +30,18 @@ import { errorMessage, isApiError } from "@/lib/api/errors";
 import { formatDateTime } from "@/lib/format";
 import type { AudioTrack, Run } from "@/lib/api/types";
 
+import { useJudgement } from "../api/judgement";
 import { runAudioUrl, runQueryKey, useCancelRun, useRerunRun, useRun } from "../api/runs";
 import { speakingTurn, type LiveTurn } from "../lib/events";
 import { canOperateRuns } from "../lib/permissions";
 import { formatEndReason, isActiveStatus } from "../lib/status";
 import { CopyableValue } from "./copyable-value";
+import { EvaluationPanel } from "./evaluation-panel";
 import { RunLog } from "./run-log";
 import { RunMetrics } from "./run-metrics";
 import { RunStatusBadge } from "./run-status-badge";
-import { Transcript } from "./transcript";
+import { TraceStatsCard } from "./trace-stats-card";
+import { Transcript, type TurnFocus } from "./transcript";
 import { useRunEvents } from "./use-run-events";
 
 const TRACK_ORDER: AudioTrack[] = ["conversation", "user", "agent"];
@@ -133,9 +136,23 @@ function RunView({ run, live, streamClosed, slug, canOperate }: RunViewProps) {
   const endReason = active ? (live.endReason ?? run.endReason) : run.endReason;
   const error = active ? (live.error ?? run.error) : run.error;
   const metrics = active ? (live.metrics ?? run.metrics) : (run.metrics ?? live.metrics);
-  const turns: LiveTurn[] = active
-    ? live.turns
-    : run.transcript.map((turn, index) => ({ ...turn, index, final: true }));
+  const turns: LiveTurn[] = useMemo(
+    () => (active ? live.turns : run.transcript.map((turn, index) => ({ ...turn, index, final: true }))),
+    [active, live.turns, run.transcript],
+  );
+  const judgement = useJudgement(slug, run.id, run.status === "completed");
+  const scenarioHref = run.scenarioId ? `${sectionHref(slug, SECTIONS.scenarios)}/${run.scenarioId}` : null;
+
+  // Evidence links bring a transcript turn into view and highlight it briefly.
+  const [focus, setFocus] = useState<TurnFocus | null>(null);
+  const focusTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const showTurn = useCallback((index: number) => {
+    clearTimeout(focusTimer.current);
+    setFocus({ index, nonce: Date.now() });
+    focusTimer.current = setTimeout(() => setFocus(null), 2500);
+  }, []);
+  useEffect(() => () => clearTimeout(focusTimer.current), []);
+
   const tracks = TRACK_ORDER.filter((track) => run.audioTracks.includes(track));
 
   function cancelRun() {
@@ -169,8 +186,8 @@ function RunView({ run, live, streamClosed, slug, canOperate }: RunViewProps) {
           <div className="flex min-w-0 flex-col gap-2">
             <div className="flex min-w-0 flex-wrap items-center gap-3">
               <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">
-                {run.scenarioId ? (
-                  <Link href={`${sectionHref(slug, SECTIONS.scenarios)}/${run.scenarioId}`} className="hover:underline">
+                {scenarioHref ? (
+                  <Link href={scenarioHref} className="hover:underline">
                     {run.scenarioName}
                   </Link>
                 ) : (
@@ -218,17 +235,28 @@ function RunView({ run, live, streamClosed, slug, canOperate }: RunViewProps) {
       </div>
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <Card className="min-w-0 gap-4">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Transcript
-              {stillActive && <span className="text-xs font-normal text-muted-foreground">Live</span>}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Transcript turns={turns} live={stillActive} speaking={stillActive && speakingTurn(turns)} />
-          </CardContent>
-        </Card>
+        <div className="flex min-w-0 flex-col gap-6">
+          <Card className="min-w-0 gap-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Transcript
+                {stillActive && <span className="text-xs font-normal text-muted-foreground">Live</span>}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Transcript turns={turns} live={stillActive} speaking={stillActive && speakingTurn(turns)} focus={focus} />
+            </CardContent>
+          </Card>
+          <EvaluationPanel
+            slug={slug}
+            run={run}
+            turns={turns}
+            judgement={judgement}
+            canOperate={canOperate}
+            scenarioHref={scenarioHref}
+            onShowTurn={showTurn}
+          />
+        </div>
         <aside className="flex min-w-0 flex-col gap-6 xl:sticky xl:top-20">
           <Card className="gap-4">
             <CardHeader>
@@ -238,6 +266,7 @@ function RunView({ run, live, streamClosed, slug, canOperate }: RunViewProps) {
               <RunMetrics metrics={metrics} modality={run.modality} />
             </CardContent>
           </Card>
+          {run.status === "completed" && <TraceStatsCard judgement={judgement.data} />}
           {run.modality === "voice" && (
             <Card className="gap-4">
               <CardHeader>

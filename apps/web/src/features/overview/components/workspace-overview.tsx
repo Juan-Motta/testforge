@@ -26,6 +26,8 @@ import { useScenarios } from "@/features/scenarios/api/scenarios";
 import { SECTIONS, sectionHref, type Section } from "@/features/shell/lib/navigation";
 import { useCurrentWorkspace, useSession } from "@/features/workspaces/session-context";
 
+import { LastWeekStrip } from "./last-week-strip";
+
 type Step = {
   section: Section;
   title: string;
@@ -94,6 +96,8 @@ export function WorkspaceOverview() {
         title={`Welcome, ${firstName}`}
         description={`Here is how to get ${workspace.name} ready for its first test run.`}
       />
+
+      <LastWeekStrip slug={workspace.slug} />
 
       <Card className="gap-0 py-0">
         <CardHeader className="flex flex-row items-center justify-between gap-4 border-b py-5">

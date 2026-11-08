@@ -23,3 +23,15 @@ export function formatOffset(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000));
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
+
+const integer = new Intl.NumberFormat("en");
+
+export function formatTokens(count: number): string {
+  return integer.format(count);
+}
+
+/** Langfuse-reported cost in USD; sub-cent amounts keep two significant digits. */
+export function formatCost(usd: number | null): string {
+  if (usd === null) return "—";
+  return "$" + (usd > 0 && usd < 0.01 ? usd.toPrecision(2) : usd.toFixed(2));
+}

@@ -24,7 +24,7 @@ Out of scope: writing scores back to Langfuse, judge stability analysis, transla
 | T2 | S2 | inline | done | langfuse RED→GREEN (v2 cursor, v1 fallback, digest, URL, egress) |
 | T3 | S1, S3, S4, S5 | inline | done | judge RED→GREEN (gating, escaping, per-sample caps + lower median, scoring, 3 samples); E2E with fake judge + fake Langfuse (waiting_traces observed, score 91, rejudge, skipped, not_configured, must fail) |
 | T4 | S6 | inline | done | report asserted in the E2E test (judged, avg, pass rate, 7-day trend, weakest criteria, scenarios, days=5 → 422) |
-| T5 | S7 | delegated (parallel with T2-T4: disjoint surface `apps/web/**`) | pending | |
+| T5 | S7 | delegated (parallel with T2-T4: disjoint surface `apps/web/**`) | done | 138 Vitest tests; lint/typecheck/build green; mock click-through incl. evidence links and re-judge |
 | T6 | S1-S7 | inline E2E + independent verifier (Risk item 2: Langfuse credentials/egress; prompt injection into the judge; item 4: judgement claims) | pending | |
 
 ## Log
