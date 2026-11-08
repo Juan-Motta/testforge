@@ -60,3 +60,83 @@ pnpm --filter web lint && pnpm --filter web build
 - Programmatic (CLI, MCP, CI): workspace API keys, sent as
   `Authorization: Bearer tf_...`. A key reaches only its workspace, with the
   `member` role. Create them in **Settings → API keys**.
+
+## CLI and MCP
+
+`testforge` is one binary: a command-line client for terminals and CI, and an
+MCP server for AI assistants. Both use a workspace API key.
+
+```bash
+make build-cli
+```
+
+```bash
+backend/bin/testforge login --url https://testforge.example.com
+```
+
+```bash
+backend/bin/testforge runs launch --tag smoke --label "$GIT_SHA" --wait
+```
+
+`login` prompts for the key, or reads it from `TESTFORGE_API_KEY` or stdin. It
+stores the URL, key and workspace in `~/.config/testforge/config.json` (or under
+`$XDG_CONFIG_HOME`), readable only by you. The key is only ever sent:
+
+- over https, or over http to localhost;
+- to the URL it was stored for.
+
+| Setting | Flag | Environment |
+|---|---|---|
+| API URL | `--url` | `TESTFORGE_URL` |
+| API key | stdin on `login` | `TESTFORGE_API_KEY` |
+| Workspace | `--workspace` | `TESTFORGE_WORKSPACE` (default: the key's workspace) |
+
+Flags override the environment, and the environment overrides the stored login.
+Every command accepts `--json` to print the API's JSON. `testforge -h` lists all
+commands.
+
+### In CI
+
+`runs launch --wait` waits for every run and its evaluation, then prints one
+line per run. `runs wait --batch <id>` does the same for a batch already
+launched. The exit code tells CI the result:
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Every run completed, and none failed its evaluation. |
+| `2` | At least one run did not complete, its evaluation failed, or it did not pass. |
+| `1` | Usage error, API or network error, or `--timeout` reached (default 30m). |
+
+A completed run counts as passed when its scenario has no judge.
+
+```yaml
+# GitHub Actions
+- run: testforge runs launch --tag smoke --label "${{ github.sha }}" --wait
+  env:
+    TESTFORGE_URL: https://testforge.example.com
+    TESTFORGE_API_KEY: ${{ secrets.TESTFORGE_API_KEY }}
+```
+
+### MCP
+
+`testforge mcp` serves the Model Context Protocol over stdio. It reads the same
+stored login or environment variables as the CLI. Every tool returns the API's
+JSON.
+
+| Area | Tools |
+|---|---|
+| Workspace | `whoami`, `list_agents`, `list_scenarios`, `get_scenario` |
+| Runs | `launch_runs`, `list_runs`, `get_run`, `cancel_run` |
+| Evaluation | `get_judgement`, `rejudge_run`, `reports_overview` |
+
+To add it to Claude Code:
+
+```bash
+claude mcp add testforge -- /path/to/testforge mcp
+```
+
+For clients configured with JSON:
+
+```json
+{ "mcpServers": { "testforge": { "command": "/path/to/testforge", "args": ["mcp"] } } }
+```

@@ -1,4 +1,4 @@
-.PHONY: help db-up db-down api worker web test test-api lint-api build-api migrate
+.PHONY: help db-up db-down api worker web test test-api lint-api build-api build-cli migrate
 
 # Development-only defaults. Never use this key outside your machine; set your own
 # SECRET_KEY (openssl rand -base64 32) and leave ALLOW_PRIVATE_NETWORK unset in production.
@@ -36,3 +36,6 @@ lint-api: ## Vet the backend
 
 build-api: ## Build backend binaries into backend/bin
 	cd backend && go build -o bin/ ./cmd/...
+
+build-cli: ## Build the testforge CLI/MCP binary into backend/bin
+	cd backend && go build -ldflags "-X testforge/internal/cli.Version=$$(git describe --tags --always --dirty 2>/dev/null || echo dev)" -o bin/testforge ./cmd/testforge
